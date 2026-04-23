@@ -1,0 +1,76 @@
+.navWrap {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  width: 100%;
+  padding: 0.45rem 0.85rem;
+  border-bottom: 1px solid #4a625e;
+  background: linear-gradient(180deg, rgba(12, 25, 23, 0.95), rgba(14, 28, 26, 0.88));
+  backdrop-filter: blur(5px);
+}
+
+.nav {
+  width: min(1280px, 100%);
+  margin: 0 auto;
+  min-height: 64px;
+  border-radius: 0.9rem;
+  background: rgba(20, 36, 34, 0.66);
+  padding: 0.6rem 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.leftGroup,
+.rightGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.brand {
+  font-family: var(--font-orbitron), sans-serif;
+  letter-spacing: 0.03em;
+  font-size: 1rem;
+  color: #f4f8ef;
+  text-decoration: none;
+}
+
+.roleBadge {
+  border-radius: 999px;
+  border: 1px solid #8ba79b;
+  background: #dbe8d9;
+  color: #11221f;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.userName {
+  color: #d6e5d9;
+  font-size: 0.92rem;
+}
+
+.disconnectButton {
+  border-radius: 999px;
+  border: 1px solid #93ab9c;
+  background: #0f1f1d;
+  color: #f4fbf2;
+  font-weight: 600;
+  padding: 0.52rem 0.95rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+@media (max-width: 680px) {
+  .nav {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .rightGroup {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
