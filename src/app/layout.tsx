@@ -1,5 +1,8 @@
 import { Geist, Orbitron } from "next/font/google";
+import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import "./globals.css";
+import { AppProviders } from "../components/providers/AppProviders";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -11,16 +14,22 @@ const orbitron = Orbitron({
   subsets: ["latin"],
 });
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Proof | Decentralized LMS on Solana",
   description:
     "Proof is a decentralized learning management system that secures educational assessments records on Solana.",
 };
 
-export default function RootLayout({ children }) {
+type RootLayoutProps = {
+  children: ReactNode;
+};
+
+export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en" className={`${geistSans.variable} ${orbitron.variable}`}>
-      <body>{children}</body>
+      <body>
+        <AppProviders>{children}</AppProviders>
+      </body>
     </html>
   );
 }

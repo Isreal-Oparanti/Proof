@@ -1,0 +1,48 @@
+.wrapper {
+  position: relative;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 30;
+  min-width: 16rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(27, 43, 88, 0.12);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+  display: grid;
+  gap: 0.5rem;
+}
+
+.address {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: #40506f;
+  word-break: break-all;
+}
+
+.menuButton {
+  width: 100%;
+  border: 1px solid rgba(27, 43, 88, 0.12);
+  border-radius: 0.85rem;
+  background: #f5f7fb;
+  color: #11203f;
+  font: inherit;
+  padding: 0.7rem 0.9rem;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.menuButton:hover {
+  background: #eef3ff;
+  border-color: rgba(27, 43, 88, 0.24);
+}
+
+.menuButton:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}

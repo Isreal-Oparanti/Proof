@@ -1,25 +1,45 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AppNav } from "../../components/AppNav";
 import styles from "./page.module.css";
 import { DUMMY_ASSESSMENTS } from "../../data/dummyAssessments";
+import type { Assessment } from "../../data/dummyAssessments";
+
+function readStoredAssessments(key: string): Assessment[] {
+  if (typeof window === "undefined") return [];
+
+  const raw = window.localStorage.getItem(key);
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as Assessment[]) : [];
+  } catch {
+    window.localStorage.removeItem(key);
+    return [];
+  }
+}
 
 function CoursesPageContent() {
   const searchParams = useSearchParams();
-  const [enrolledList, setEnrolledList] = useState([]);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [assessmentName, setAssessmentName] = useState("");
-  const [myAssessments, setMyAssessments] = useState([]);
-
   const role = (searchParams.get("role") || "student").toLowerCase();
   const name = searchParams.get("name") || "Learner";
   const isTutor = role === "tutor";
   const decodedName = decodeURIComponent(name);
   const tutorStorageKey = `proof-accessments-${decodedName.toLowerCase()}`;
   const enrollStorageKey = `proof-enrolled-${decodedName.toLowerCase()}`;
+  const [enrolledList, setEnrolledList] = useState<Assessment[]>(() =>
+    isTutor ? [] : readStoredAssessments(enrollStorageKey),
+  );
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [assessmentName, setAssessmentName] = useState("");
+  const [myAssessments, setMyAssessments] = useState<Assessment[]>(() =>
+    isTutor ? readStoredAssessments(tutorStorageKey) : [],
+  );
 
   const examHref = useMemo(() => {
     const params = new URLSearchParams({
@@ -29,29 +49,7 @@ function CoursesPageContent() {
     return `/exam?${params.toString()}`;
   }, [role, decodedName]);
 
-  useEffect(() => {
-    if (isTutor) {
-      const raw = window.localStorage.getItem(tutorStorageKey);
-      if (!raw) return;
-      try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) setMyAssessments(parsed);
-      } catch {
-        window.localStorage.removeItem(tutorStorageKey);
-      }
-      return;
-    }
-    const raw = window.localStorage.getItem(enrollStorageKey);
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) setEnrolledList(parsed);
-    } catch {
-      window.localStorage.removeItem(enrollStorageKey);
-    }
-  }, [isTutor, tutorStorageKey, enrollStorageKey]);
-
-  const enroll = (assessmentId) => {
+  const enroll = (assessmentId: Assessment["id"]) => {
     if (isTutor) return;
     const assessment = DUMMY_ASSESSMENTS.find((a) => a.id === assessmentId);
     if (!assessment) return;
@@ -63,7 +61,7 @@ function CoursesPageContent() {
     });
   };
 
-  const createAssessment = (event) => {
+  const createAssessment = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const cleanName = assessmentName.trim();
     if (!cleanName || !isTutor) return;

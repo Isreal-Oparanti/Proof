@@ -1,11 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AppNav } from "../../components/AppNav";
 import { DUMMY_ASSESSMENTS } from "../../data/dummyAssessments";
+import type { Assessment, AssessmentQuestion } from "../../data/dummyAssessments";
 import styles from "./page.module.css";
+
+function readStoredAssessments(key: string): Assessment[] {
+  if (typeof window === "undefined") return [];
+
+  const raw = window.localStorage.getItem(key);
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as Assessment[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 function ExamPageContent() {
   const searchParams = useSearchParams();
@@ -17,36 +32,12 @@ function ExamPageContent() {
   const tutorKey = `proof-accessments-${decodedName.toLowerCase()}`;
   const enrollKey = `proof-enrolled-${decodedName.toLowerCase()}`;
 
-  const [tutorAssessments, setTutorAssessments] = useState([]);
-  const [enrolledAssessments, setEnrolledAssessments] = useState([]);
-
-  useEffect(() => {
-    if (isTutor) {
-      const raw = window.localStorage.getItem(tutorKey);
-      if (!raw) {
-        setTutorAssessments([]);
-        return;
-      }
-      try {
-        const parsed = JSON.parse(raw);
-        setTutorAssessments(Array.isArray(parsed) ? parsed : []);
-      } catch {
-        setTutorAssessments([]);
-      }
-      return;
-    }
-    const raw = window.localStorage.getItem(enrollKey);
-    if (!raw) {
-      setEnrolledAssessments([]);
-      return;
-    }
-    try {
-      const parsed = JSON.parse(raw);
-      setEnrolledAssessments(Array.isArray(parsed) ? parsed : []);
-    } catch {
-      setEnrolledAssessments([]);
-    }
-  }, [isTutor, tutorKey, enrollKey]);
+  const [tutorAssessments] = useState<Assessment[]>(() =>
+    isTutor ? readStoredAssessments(tutorKey) : [],
+  );
+  const [enrolledAssessments] = useState<Assessment[]>(() =>
+    isTutor ? [] : readStoredAssessments(enrollKey),
+  );
 
   const backHref = useMemo(() => {
     const params = new URLSearchParams({
@@ -56,12 +47,12 @@ function ExamPageContent() {
     return `/courses?${params.toString()}`;
   }, [role, decodedName]);
 
-  const defaultQuestions = [
+  const defaultQuestions: AssessmentQuestion[] = [
     { prompt: "What is the primary goal of on-chain assessment records?", options: ["Privacy", "Immutability", "Speed only", "UI polish"] },
     { prompt: "Which layer stores the tamper-proof score in Proof?", options: ["Browser cache", "Solana", "Email", "Spreadsheet"] },
   ];
 
-  const enrichWithExamContent = (item) => ({
+  const enrichWithExamContent = (item: Assessment): Assessment & { questions: AssessmentQuestion[] } => ({
     ...item,
     questions: item.questions?.length ? item.questions : defaultQuestions,
   });

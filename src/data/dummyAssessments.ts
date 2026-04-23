@@ -1,4 +1,18 @@
-export const DUMMY_ASSESSMENTS = [
+export type AssessmentQuestion = {
+  prompt: string;
+  options: string[];
+};
+
+export type Assessment = {
+  id: number;
+  title: string;
+  tutor: string;
+  level: string;
+  lessons: number;
+  questions?: AssessmentQuestion[];
+};
+
+export const DUMMY_ASSESSMENTS: Assessment[] = [
   {
     id: 1,
     title: "Solana Smart Contract Fundamentals",

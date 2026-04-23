@@ -107,6 +107,125 @@
   height: auto;
 }
 
+.statusGrid {
+  margin-top: 1.6rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.statusCard {
+  min-height: 132px;
+  border: 1px solid #465d59;
+  border-radius: 0.9rem;
+  background: rgba(18, 31, 29, 0.7);
+  padding: 1rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.statusCard strong {
+  color: #f2f8f2;
+  font-size: 1rem;
+}
+
+.statusCard p {
+  color: #bacabd;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.statusLabel {
+  color: #90aca0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+.arciumPanel {
+  margin-top: 1.4rem;
+  border: 1px solid #465d59;
+  border-radius: 1rem;
+  background: rgba(18, 31, 29, 0.78);
+  padding: 1rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.arciumPanelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.arciumTitle {
+  margin: 0.25rem 0 0;
+  color: #f2f8f2;
+  font-size: 1.2rem;
+}
+
+.arciumFieldRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.arciumField {
+  display: grid;
+  gap: 0.45rem;
+  color: #d9e5da;
+  font-size: 0.9rem;
+}
+
+.arciumField input {
+  border: 1px solid #607774;
+  border-radius: 0.8rem;
+  background: rgba(7, 18, 16, 0.9);
+  color: #f2f8f2;
+  padding: 0.8rem 0.9rem;
+  font: inherit;
+}
+
+.arciumHint {
+  margin: 0;
+  color: #bacabd;
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.arciumError {
+  margin: 0;
+  color: #ffd3c6;
+  font-size: 0.92rem;
+}
+
+.arciumResult {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.arciumResult p {
+  margin: 0;
+  color: #d9e5da;
+  font-size: 0.92rem;
+}
+
+.codeBlock {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid #607774;
+  border-radius: 0.85rem;
+  background: rgba(7, 18, 16, 0.95);
+  color: #d8efe1;
+  padding: 0.9rem;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
 .primaryButton,
 .ghostButton,
 .secondaryButton {
@@ -225,6 +344,14 @@
   .techFont {
     letter-spacing: 0.015em;
   }
+
+  .arciumPanelHeader {
+    display: grid;
+  }
+
+  .arciumFieldRow {
+    grid-template-columns: 1fr;
+  }
 }
 
 @keyframes fadeIn {
@@ -259,5 +386,15 @@
 
   .heroVisual {
     order: -1;
+  }
+
+  .statusGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .statusGrid {
+    grid-template-columns: 1fr;
   }
 }

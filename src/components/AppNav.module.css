@@ -63,6 +63,23 @@
   cursor: pointer;
 }
 
+.walletButton {
+  border-radius: 999px;
+  border: 1px solid #89a391;
+  background: rgba(14, 31, 29, 0.74);
+  color: #f4fbf2;
+  font-weight: 600;
+  padding: 0.52rem 0.95rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.disconnectButton:disabled,
+.walletButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 @media (max-width: 680px) {
   .nav {
     flex-direction: column;
