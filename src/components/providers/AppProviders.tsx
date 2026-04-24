@@ -2,6 +2,7 @@
 
 import type { SolanaClientConfig } from "@solana/client";
 import { SolanaProvider } from "@solana/react-hooks";
+import { Toaster } from "react-hot-toast";
 
 const defaultConfig: SolanaClientConfig = {
   cluster: "devnet",
@@ -15,5 +16,25 @@ type AppProvidersProps = {
 };
 
 export function AppProviders({ children }: AppProvidersProps) {
-  return <SolanaProvider config={defaultConfig}>{children}</SolanaProvider>;
+  return (
+    <SolanaProvider config={defaultConfig}>
+      {children}
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 3500,
+          style: {
+            background: "#fff8f0",
+            color: "#233525",
+            border: "1px solid #bdc79f",
+          },
+          error: {
+            style: {
+              border: "1px solid #d2a7a7",
+            },
+          },
+        }}
+      />
+    </SolanaProvider>
+  );
 }

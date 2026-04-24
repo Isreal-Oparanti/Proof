@@ -4,7 +4,6 @@ import Link from "next/link";
 import type { FormEvent } from "react";
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Navbar } from "../../components/Navbar";
 import { DUMMY_ASSESSMENTS } from "../../data/dummyAssessments";
 import type { Assessment } from "../../data/dummyAssessments";
 
@@ -87,8 +86,6 @@ function CoursesPageContent() {
 
   return (
     <div className="min-h-screen bg-[#253533] font-[family:var(--font-geist-sans)] text-[#eef6ed]">
-      <Navbar displayName={decodedName} role={role} />
-
       <main className="mx-auto mt-[1.1rem] w-full max-w-[1280px] px-[0.85rem] pb-8">
         <section className="mb-5 border-none bg-transparent px-[0.15rem]">
           <div className="flex flex-wrap items-start justify-between gap-4 max-[680px]:flex-col max-[680px]:items-stretch">

@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Navbar } from "../../components/Navbar";
 import { DUMMY_ASSESSMENTS } from "../../data/dummyAssessments";
 import type { Assessment, AssessmentQuestion } from "../../data/dummyAssessments";
 
@@ -58,8 +57,6 @@ function ExamPageContent() {
 
   return (
     <div className="min-h-screen bg-[#253533] text-[#eef6ed]">
-      <Navbar displayName={decodedName} role={role} />
-
       <div className="mx-auto max-w-[900px] px-[clamp(0.85rem,3vw,2rem)] pt-5 pb-10">
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>

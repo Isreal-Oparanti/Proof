@@ -1,20 +1,40 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { usePathname } from "next/navigation";
+import { Suspense, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { Navbar } from "./Navbar";
 
 type AppLayoutShellProps = {
   children: ReactNode;
 };
 
-export function AppLayoutShell({ children }: AppLayoutShellProps) {
-  const pathname = usePathname();
-  const showNavbar = pathname === "/";
+function SearchAwareNavbar() {
+  const searchParams = useSearchParams();
 
+  const navbarProps = useMemo(() => {
+    const name = searchParams.get("name");
+    const role = searchParams.get("role");
+
+    if (!name || !role) {
+      return {};
+    }
+
+    return {
+      displayName: decodeURIComponent(name),
+      role,
+    };
+  }, [searchParams]);
+
+  return <Navbar {...navbarProps} />;
+}
+
+export function AppLayoutShell({ children }: AppLayoutShellProps) {
   return (
     <>
-      {showNavbar ? <Navbar /> : null}
+      <Suspense fallback={<Navbar />}>
+        <SearchAwareNavbar />
+      </Suspense>
       {children}
     </>
   );

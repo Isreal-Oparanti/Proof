@@ -7,7 +7,7 @@ import { AppProviders } from "../components/providers/AppProviders";
 export const metadata: Metadata = {
   title: "Proof | Decentralized LMS on Solana",
   description:
-    "Proof is a decentralized learning management system that secures educational assessments records on Solana.",
+    "Proof is a Solana-based learning platform where tutors publish courses and encrypted exams, and students take assessments with verifiable results recorded on-chain.",
 };
 
 type RootLayoutProps = {
