@@ -5,8 +5,6 @@ import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useWalletConnection } from "@solana/react-hooks";
-import { WalletConnectionButton } from "../components/WalletConnectionButton";
-import styles from "./page.module.css";
 
 type UserRole = "student" | "tutor";
 
@@ -137,32 +135,32 @@ export default function Home() {
   };
 
   return (
-    <div className={styles.page}>
-      <div className={styles.navWrap}>
-        <nav className={styles.nav}>
-          <div className={styles.brand}>
-            <span className={styles.techFont}>Proof</span>
-          </div>
-          <div className={styles.navActions}>
-            <WalletConnectionButton
-              className={`${styles.primaryButton} ${styles.techFont}`}
-              connectedLabel="Wallet Ready"
-            />
-          </div>
-        </nav>
+    <div className="min-h-screen pt-8 pb-12 font-[family:var(--font-geist-sans)]">
+      <div className="mx-auto w-full max-w-[1280px] px-4 sm:px-6 lg:px-8">
+        <main className="mx-auto grid w-full max-w-[1200px] items-center gap-[clamp(1.5rem,4vw,4rem)] md:grid-cols-[1.1fr_1fr]">
+ 
+        </main>
       </div>
 
-      <main className={styles.main}>
- 
-      </main>
-
       {isRegisterOpen && (
-        <div className={styles.modalOverlay} onClick={() => setIsRegisterOpen(false)}>
-          <div className={styles.modal} onClick={(event) => event.stopPropagation()}>
-            <h2 className={styles.techFont}>Register Your Account</h2>
-            <p>Set up your profile to start learning or publishing courses.</p>
-            <form onSubmit={handleSubmit} className={styles.form}>
-              <label htmlFor="fullName">Full name</label>
+        <div
+          className="fixed inset-0 z-20 grid place-items-center bg-[rgba(4,11,10,0.62)]"
+          onClick={() => setIsRegisterOpen(false)}
+        >
+          <div
+            className="w-[min(92vw,420px)] rounded-[1.05rem] border border-[#bdc79f] bg-[var(--secondary)] p-[1.3rem] shadow-[0_18px_40px_rgba(5,14,13,0.4)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 className="mb-2 text-[1.7rem] tracking-[0.03em] text-[#233525]">
+              Register Your Account
+            </h2>
+            <p className="mb-[1.1rem] text-base leading-[1.45] text-[#3e4f3d]">
+              Set up your profile to start learning or publishing courses.
+            </p>
+            <form onSubmit={handleSubmit} className="grid gap-[0.6rem]">
+              <label htmlFor="fullName" className="text-[0.9rem] font-semibold text-[#243527]">
+                Full name
+              </label>
               <input
                 id="fullName"
                 type="text"
@@ -171,10 +169,13 @@ export default function Home() {
                   setFormData((prev) => ({ ...prev, fullName: event.target.value }))
                 }
                 placeholder="Enter your full name"
+                className="w-full rounded-[0.8rem] border border-[#b6c3a3] bg-[var(--secondary)] px-[0.9rem] py-[0.76rem] text-[#1b2c1d] outline-none focus:border-[#2f4331] focus:ring-2 focus:ring-[rgba(35,53,37,0.2)]"
                 required
               />
 
-              <label htmlFor="role">Role</label>
+              <label htmlFor="role" className="text-[0.9rem] font-semibold text-[#243527]">
+                Role
+              </label>
               <select
                 id="role"
                 value={formData.role}
@@ -184,12 +185,16 @@ export default function Home() {
                     role: event.target.value as UserRole,
                   }))
                 }
+                className="w-full rounded-[0.8rem] border border-[#b6c3a3] bg-[var(--secondary)] px-[0.9rem] py-[0.76rem] text-[#1b2c1d] outline-none focus:border-[#2f4331] focus:ring-2 focus:ring-[rgba(35,53,37,0.2)]"
               >
                 <option value="student">Student</option>
                 <option value="tutor">Tutor</option>
               </select>
 
-              <button type="submit" className={`${styles.primaryButton} ${styles.techFont}`}>
+              <button
+                type="submit"
+                className="cursor-pointer rounded-full border border-[#89a391] bg-[#0f1f1d] px-[1.3rem] py-[0.78rem] font-semibold tracking-[0.03em] text-[var(--secondary)] transition hover:-translate-y-px hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
+              >
                 Register Now
               </button>
             </form>

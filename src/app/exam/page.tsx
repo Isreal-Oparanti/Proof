@@ -3,10 +3,9 @@
 import Link from "next/link";
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AppNav } from "../../components/AppNav";
+import { Navbar } from "../../components/Navbar";
 import { DUMMY_ASSESSMENTS } from "../../data/dummyAssessments";
 import type { Assessment, AssessmentQuestion } from "../../data/dummyAssessments";
-import styles from "./page.module.css";
 
 function readStoredAssessments(key: string): Assessment[] {
   if (typeof window === "undefined") return [];
@@ -58,48 +57,53 @@ function ExamPageContent() {
   });
 
   return (
-    <div className={styles.layout}>
-      <AppNav displayName={decodedName} role={role} />
+    <div className="min-h-screen bg-[#253533] text-[#eef6ed]">
+      <Navbar displayName={decodedName} role={role} />
 
-      <div className={styles.page}>
-      <header className={styles.pageHeader}>
+      <div className="mx-auto max-w-[900px] px-[clamp(0.85rem,3vw,2rem)] pt-5 pb-10">
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className={styles.pageTitle}>
+          <h1 className="mb-[0.4rem] text-[clamp(1.35rem,2.4vw,1.85rem)] leading-tight">
             {isTutor ? "Your created assessments" : "Your enrolled assessments"}
           </h1>
-          <p className={styles.pageSubtitle}>
+          <p className="max-w-[52ch] text-[0.95rem] leading-[1.55] text-[var(--secondary)]/80">
             {isTutor
               ? "Exam content for each accessment you created."
               : "Assessments you enrolled in from the catalog. Open each to view exam-style content."}
           </p>
         </div>
-        <Link href={backHref} className={styles.backLink}>
+        <Link
+          href={backHref}
+          className="self-center rounded-full border border-[#93ab9c] bg-[var(--secondary)] px-[1.15rem] py-[0.72rem] text-[0.9rem] font-bold text-[#102320]"
+        >
           Back to courses
         </Link>
       </header>
 
       {isTutor ? (
         tutorAssessments.length === 0 ? (
-          <p className={styles.empty}>No created assessments yet. Create one from the courses page.</p>
+          <p className="m-0 text-[var(--secondary)]/80">No created assessments yet. Create one from the courses page.</p>
         ) : (
-          <ul className={styles.list}>
+          <ul className="grid list-none gap-[1.1rem] p-0">
             {tutorAssessments.map((item) => {
               const enriched = enrichWithExamContent(item);
               return (
-                <li key={item.id} className={styles.examCard}>
-                  <h2>{enriched.title}</h2>
-                  <p className={styles.meta}>
+                <li key={item.id} className="rounded-2xl border border-[#4d6661] bg-[#2b3c3a] px-[1.2rem] py-[1.15rem]">
+                  <h2 className="mb-[0.35rem] text-[1.15rem]">{enriched.title}</h2>
+                  <p className="mb-[0.85rem] text-[0.9rem] text-[var(--secondary)]/78">
                     Tutor: {enriched.tutor} · {enriched.level} · {enriched.lessons} lesson(s)
                   </p>
-                  <div className={styles.examBody}>
-                    <h3 className={styles.sectionLabel}>Exam content</h3>
-                    <ol className={styles.questionList}>
+                  <div className="border-t border-[#4a5f5b] pt-[0.85rem]">
+                    <h3 className="mb-[0.6rem] text-[0.82rem] font-medium uppercase tracking-[0.08em] text-[var(--secondary)]/74">
+                      Exam content
+                    </h3>
+                    <ol className="grid list-decimal gap-[0.85rem] pl-[1.1rem]">
                       {enriched.questions.map((q, idx) => (
-                        <li key={idx} className={styles.question}>
-                          <p className={styles.prompt}>{q.prompt}</p>
-                          <ul className={styles.options}>
+                        <li key={idx} className="text-[#dfece3]">
+                          <p className="mb-[0.4rem] text-[0.95rem] font-semibold">{q.prompt}</p>
+                          <ul className="list-disc pl-4 text-[0.88rem] text-[var(--secondary)]/76">
                             {q.options.map((opt, oi) => (
-                              <li key={oi}>{opt}</li>
+                              <li key={oi} className="mb-[0.2rem]">{opt}</li>
                             ))}
                           </ul>
                         </li>
@@ -112,27 +116,29 @@ function ExamPageContent() {
           </ul>
         )
       ) : enrolledAssessments.length === 0 ? (
-        <p className={styles.empty}>You have not enrolled in any assessments yet.</p>
+        <p className="m-0 text-[var(--secondary)]/80">You have not enrolled in any assessments yet.</p>
       ) : (
-        <ul className={styles.list}>
+        <ul className="grid list-none gap-[1.1rem] p-0">
           {enrolledAssessments.map((item) => {
             const fromDummy = DUMMY_ASSESSMENTS.find((d) => d.id === item.id) || item;
             const enriched = enrichWithExamContent(fromDummy);
             return (
-              <li key={item.id} className={styles.examCard}>
-                <h2>{enriched.title}</h2>
-                <p className={styles.meta}>
+              <li key={item.id} className="rounded-2xl border border-[#4d6661] bg-[#2b3c3a] px-[1.2rem] py-[1.15rem]">
+                <h2 className="mb-[0.35rem] text-[1.15rem]">{enriched.title}</h2>
+                <p className="mb-[0.85rem] text-[0.9rem] text-[var(--secondary)]/78">
                   Tutor: {enriched.tutor} · {enriched.level} · {enriched.lessons} lesson(s)
                 </p>
-                <div className={styles.examBody}>
-                  <h3 className={styles.sectionLabel}>Assessment content</h3>
-                  <ol className={styles.questionList}>
+                <div className="border-t border-[#4a5f5b] pt-[0.85rem]">
+                  <h3 className="mb-[0.6rem] text-[0.82rem] font-medium uppercase tracking-[0.08em] text-[var(--secondary)]/74">
+                    Assessment content
+                  </h3>
+                  <ol className="grid list-decimal gap-[0.85rem] pl-[1.1rem]">
                     {enriched.questions.map((q, idx) => (
-                      <li key={idx} className={styles.question}>
-                        <p className={styles.prompt}>{q.prompt}</p>
-                        <ul className={styles.options}>
+                      <li key={idx} className="text-[#dfece3]">
+                        <p className="mb-[0.4rem] text-[0.95rem] font-semibold">{q.prompt}</p>
+                        <ul className="list-disc pl-4 text-[0.88rem] text-[var(--secondary)]/76">
                           {q.options.map((opt, oi) => (
-                            <li key={oi}>{opt}</li>
+                            <li key={oi} className="mb-[0.2rem]">{opt}</li>
                           ))}
                         </ul>
                       </li>
@@ -151,7 +157,7 @@ function ExamPageContent() {
 
 export default function ExamPage() {
   return (
-    <Suspense fallback={<div className={styles.layout} />}>
+    <Suspense fallback={<div className="min-h-screen bg-[#253533]" />}>
       <ExamPageContent />
     </Suspense>
   );

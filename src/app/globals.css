@@ -1,6 +1,10 @@
+@import "tailwindcss";
+
 :root {
   --background: #253533;
   --foreground: #eef6ed;
+  --secondary: #fff8f0;
+  --font-geist-sans: "Segoe UI", Arial, Helvetica, sans-serif;
 }
 
 html {
