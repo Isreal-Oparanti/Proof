@@ -18,10 +18,30 @@ export type ArciumServerStatus = {
 export type ArciumEncryptionResult = ArciumServerStatus & {
   ciphertext: number[][];
   clientPublicKeyHex: string;
+  /** Secret used to derive the shared secret — store server-side only, never expose to clients. */
+  clientSecretKeyHex: string;
   mxePublicKeyHex: string;
   nonceHex: string;
   plaintext: string[];
 };
+
+/**
+ * Server-side: decrypt values previously encrypted with encryptWithArcium.
+ * Requires the clientSecretKeyHex that was stored when the data was encrypted.
+ */
+export function decryptWithArcium(
+  ciphertext: number[][],
+  clientSecretKeyHex: string,
+  nonceHex: string,
+): number[] {
+  const clientSecretKey = parseHexKey(clientSecretKeyHex);
+  const mxePublicKey = resolveMxePublicKey();
+  const sharedSecret = x25519.getSharedSecret(clientSecretKey, mxePublicKey);
+  const nonce = Buffer.from(nonceHex, "hex");
+  const cipher = new RescueCipher(sharedSecret);
+  const decrypted = cipher.decrypt(ciphertext, nonce);
+  return decrypted.map(Number);
+}
 
 export function getArciumServerStatus(): ArciumServerStatus {
   try {
@@ -62,6 +82,7 @@ export function encryptWithArcium(values: number[]): ArciumEncryptionResult {
     ...status,
     ciphertext,
     clientPublicKeyHex: toHex(clientPublicKey),
+    clientSecretKeyHex: toHex(clientSecretKey),
     mxePublicKeyHex: toHex(mxePublicKey),
     nonceHex: toHex(nonce),
     plaintext: normalizedValues.map(String),

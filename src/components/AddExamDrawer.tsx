@@ -270,6 +270,7 @@ export function AddExamDrawer({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [examTitle, setExamTitle] = useState("");
   const [isImportingFile, setIsImportingFile] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [questions, setQuestions] = useState<DraftQuestion[]>([createEmptyQuestion()]);
 
   useEffect(() => {
@@ -354,7 +355,7 @@ export function AddExamDrawer({
       return;
     }
 
-    if (proofArcium.isSending) {
+    if (isSaving) {
       return;
     }
 
@@ -412,21 +413,42 @@ export function AddExamDrawer({
     };
 
     proofArcium.reset();
+    setIsSaving(true);
 
     try {
-      const [contentEncryption, answerKeyEncryption] = await Promise.all([
-        encryptValues(encodeUtf8Values(JSON.stringify(contentPayload))),
-        encryptValues(encodeUtf8Values(JSON.stringify(answerKeyPayload))),
-      ]);
+      // Encrypt only the raw answer bytes (one per question, value 0-3).
+      // The on-chain circuit expects exactly question_count ciphertexts.
+      const answerBytes = normalizedQuestions.map((q) => q.correctAnswer);
+      const answerKeyEncryption = await encryptValues(answerBytes);
+
+      // Store questions + correct answers in MongoDB — server Arcium-encrypts them.
+      // Questions are decrypted and returned to students with a valid on-chain ExamAccess.
+      // Correct answers are decrypted and returned only after session.completed on-chain.
+      const storeResponse = await fetch("/api/exam/content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          examId: nextExamId,
+          title: trimmedTitle,
+          questions: normalizedQuestions.map(({ options, prompt }) => ({ options, prompt })),
+          correctAnswers: normalizedQuestions.map((q) => q.correctAnswer),
+        }),
+      });
+      if (!storeResponse.ok) {
+        const err = (await storeResponse.json()) as { error?: string };
+        throw new Error(err.error || "Failed to store exam content.");
+      }
 
       const instruction = await proofArcium.getCreateExamInstruction({
         courseId: course.courseId.toString(),
         encryptedExam: {
+          // One ciphertext per answer byte — matches the circuit's AnswerKey struct.
           answerKeyCiphertexts: answerKeyEncryption.ciphertext.map((chunk) => toFixedBytes32(chunk)),
           answerKeyNonce: bytesToLittleEndianBigInt(parseHexBytes(answerKeyEncryption.nonceHex)).toString(),
-          contentCiphertexts: contentEncryption.ciphertext.map((chunk) => toFixedBytes32(chunk)),
-          contentNonce: bytesToLittleEndianBigInt(parseHexBytes(contentEncryption.nonceHex)).toString(),
-          contentPubkey: toFixedBytes32(parseHexBytes(contentEncryption.clientPublicKeyHex)),
+          // Content stored off-chain in MongoDB — pass empty array and zeroed pubkey on-chain.
+          contentCiphertexts: [],
+          contentNonce: 0,
+          contentPubkey: new Uint8Array(32),
         },
         examId: nextExamId,
         questionCount: normalizedQuestions.length,
@@ -444,6 +466,8 @@ export function AddExamDrawer({
       }
 
       toast.error(error instanceof Error ? error.message : "Failed to create exam.");
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -672,15 +696,15 @@ export function AddExamDrawer({
                 Cancel
               </Button>
               <Button
-                disabled={!nextExamId}
-                loading={proofArcium.isSending}
+                disabled={!nextExamId || isSaving}
+                loading={isSaving}
                 onClick={() => {
                   void handleSave();
                 }}
                 size="large"
                 type="primary"
               >
-                Create Exam
+                {isSaving ? "Creating…" : "Create Exam"}
               </Button>
             </Space>
           </div>

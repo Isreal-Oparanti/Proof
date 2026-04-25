@@ -5,10 +5,14 @@ import {
   getProgramDerivedAddress,
   type Address,
 } from "@solana/addresses";
-import { AccountRole, type Instruction } from "@solana/instructions";
+import { AccountRole, type AccountLookupMeta, type Instruction } from "@solana/instructions";
+import type { AddressLookupTableData } from "@solana/client";
 
 export const PROOF_ARCIUM_PROGRAM_ID = address(
   "Ch5KUtPipgBTnjCVX1du7keV7pd6cdxJDLovRErFuSh",
+);
+export const MXE_LUT_ADDRESS = address(
+  "7gMNVZmDWoWBGHGpdAY1BTYwQgmk73i5o5No93JbMdFr",
 );
 export const ARCIUM_PROGRAM_ID = address(
   "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ",
@@ -43,6 +47,7 @@ const DISCRIMINATORS = {
 
 const ACCOUNT_DISCRIMINATORS = {
   course: [206, 6, 78, 228, 163, 138, 241, 106],
+  exam: [217, 124, 206, 150, 202, 222, 128, 5],
   globalConfig: [149, 8, 156, 202, 160, 252, 176, 217],
   user: [159, 117, 95, 227, 239, 151, 58, 236],
 } as const;
@@ -80,6 +85,15 @@ export type ProofCourseAccount = {
   title: string;
   tutor: string;
   tutorName: string;
+};
+
+export type ProofExamAccount = {
+  bump: number;
+  courseId: bigint;
+  examId: bigint;
+  questionCount: number;
+  title: string;
+  tutor: string;
 };
 
 export type FixedBytes32 = readonly number[] | Uint8Array;
@@ -135,7 +149,21 @@ export type GradeExamCallbackOutput = {
 type InstructionAccount = {
   address: Address;
   role: AccountRole;
-};
+} | AccountLookupMeta;
+
+function lookupAccount(
+  addr: Address,
+  role: AccountRole.READONLY | AccountRole.WRITABLE,
+  lut: { address: Address; data: AddressLookupTableData } | undefined,
+): InstructionAccount {
+  if (lut) {
+    const idx = lut.data.addresses.indexOf(addr);
+    if (idx !== -1) {
+      return { address: addr, addressIndex: idx, lookupTableAddress: lut.address, role };
+    }
+  }
+  return { address: addr, role };
+}
 
 function concatBytes(...parts: readonly Uint8Array[]) {
   const totalLength = parts.reduce((sum, part) => sum + part.length, 0);
@@ -426,6 +454,52 @@ export function decodeCourseAccount(data: Uint8Array | readonly number[]): Proof
     title: new TextDecoder().decode(titleBytes),
     tutor,
     tutorName: new TextDecoder().decode(tutorNameBytes),
+  };
+}
+
+export function decodeExamAccount(data: Uint8Array | readonly number[]): ProofExamAccount {
+  const bytes = data instanceof Uint8Array ? data : Uint8Array.from(data);
+  const discriminator = Uint8Array.from(ACCOUNT_DISCRIMINATORS.exam);
+
+  if (bytes.length < 8 + 8 + 8 + 32 + 4 + 1) {
+    throw new Error("Exam account data is too short.");
+  }
+
+  for (let index = 0; index < discriminator.length; index += 1) {
+    if (bytes[index] !== discriminator[index]) {
+      throw new Error("Invalid exam account discriminator.");
+    }
+  }
+
+  let offset = 8;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const examId = view.getBigUint64(offset, true);
+  offset += 8;
+  const courseId = view.getBigUint64(offset, true);
+  offset += 8;
+  const tutor = addressDecoder.decode(bytes.slice(offset, offset + 32));
+  offset += 32;
+
+  const titleLength = view.getUint32(offset, true);
+  offset += 4;
+
+  if (offset + titleLength + 1 > bytes.length) {
+    throw new Error("Exam account title length is out of bounds.");
+  }
+
+  const titleBytes = bytes.slice(offset, offset + titleLength);
+  offset += titleLength;
+
+  const questionCount = bytes[offset];
+  const bump = bytes[bytes.length - 1];
+
+  return {
+    bump,
+    courseId,
+    examId,
+    questionCount,
+    title: new TextDecoder().decode(titleBytes),
+    tutor,
   };
 }
 
@@ -761,7 +835,9 @@ export async function buildTakeExamInstruction(
     examId: bigint | number | string;
     takeExamAccounts: TakeExamAccounts;
   },
+  lut?: AddressLookupTableData,
 ) {
+  const lutCtx = lut ? { address: MXE_LUT_ADDRESS, data: lut } : undefined;
   const studentAddress = toAddress(student);
   const studentProfile = await findUserPda(studentAddress);
   const course = await findCoursePda(args.courseId);
@@ -782,16 +858,16 @@ export async function buildTakeExamInstruction(
     account(examAccess, AccountRole.READONLY),
     account(session, AccountRole.WRITABLE),
     account(signPdaAccount, AccountRole.WRITABLE),
-    account(args.takeExamAccounts.mxeAccount, AccountRole.READONLY),
-    account(args.takeExamAccounts.mempoolAccount, AccountRole.WRITABLE),
-    account(args.takeExamAccounts.executingPool, AccountRole.WRITABLE),
-    account(args.takeExamAccounts.computationAccount, AccountRole.WRITABLE),
-    account(args.takeExamAccounts.compDefAccount, AccountRole.READONLY),
-    account(args.takeExamAccounts.clusterAccount, AccountRole.WRITABLE),
-    account(args.takeExamAccounts.poolAccount ?? DEFAULT_POOL_ACCOUNT, AccountRole.WRITABLE),
-    account(args.takeExamAccounts.clockAccount ?? DEFAULT_CLOCK_ACCOUNT, AccountRole.WRITABLE),
+    lookupAccount(args.takeExamAccounts.mxeAccount, AccountRole.READONLY, lutCtx),
+    lookupAccount(args.takeExamAccounts.mempoolAccount, AccountRole.WRITABLE, lutCtx),
+    lookupAccount(args.takeExamAccounts.executingPool, AccountRole.WRITABLE, lutCtx),
+    lookupAccount(args.takeExamAccounts.computationAccount, AccountRole.WRITABLE, lutCtx),
+    lookupAccount(args.takeExamAccounts.compDefAccount, AccountRole.READONLY, lutCtx),
+    lookupAccount(args.takeExamAccounts.clusterAccount, AccountRole.WRITABLE, lutCtx),
+    lookupAccount(args.takeExamAccounts.poolAccount ?? DEFAULT_POOL_ACCOUNT, AccountRole.WRITABLE, lutCtx),
+    lookupAccount(args.takeExamAccounts.clockAccount ?? DEFAULT_CLOCK_ACCOUNT, AccountRole.WRITABLE, lutCtx),
     account(SYSTEM_PROGRAM_ID, AccountRole.READONLY),
-    account(ARCIUM_PROGRAM_ID, AccountRole.READONLY),
+    lookupAccount(ARCIUM_PROGRAM_ID, AccountRole.READONLY, lutCtx),
   ], [
     encodeU64(args.computationOffset),
     encodeByteArray(answerBytes),

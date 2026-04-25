@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useAccount, useWalletConnection } from "@solana/react-hooks";
@@ -642,7 +643,7 @@ export default function Home() {
               <div
                 style={{
                   display: "flex",
-                  justifyContent: "flex-end",
+                  justifyContent: "space-between",
                   alignItems: "flex-start",
                   width: "100%",
                   paddingTop: "2.15rem",
@@ -662,6 +663,19 @@ export default function Home() {
                 >
                   Create Course
                 </button>
+                <Link
+                  href="/exam"
+                  style={{
+                    height: "2.55rem",
+                    color: "var(--background)",
+                    WebkitTextFillColor: "var(--background)",
+                    opacity: 1,
+                    textDecoration: "none",
+                  }}
+                  className="inline-flex min-w-[10.25rem] cursor-pointer items-center justify-center rounded-lg border border-[#253533] bg-[var(--secondary)] px-[1.1rem] text-center text-[0.95rem] font-semibold transition hover:-translate-y-px hover:bg-[#f3e7d8]"
+                >
+                  {isTutor ? "My Exams" : "Exams"}
+                </Link>
               </div>
               <section
                 style={{

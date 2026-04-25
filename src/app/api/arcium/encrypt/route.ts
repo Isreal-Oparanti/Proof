@@ -14,7 +14,9 @@ export async function POST(request: Request) {
     const body = (await request.json()) as EncryptRequestBody;
     const values = Array.isArray(body.values) ? body.values : [7, 21];
 
-    return NextResponse.json(encryptWithArcium(values));
+    // Never expose clientSecretKeyHex to the browser — strip it before returning.
+    const { clientSecretKeyHex: _secret, ...safeResult } = encryptWithArcium(values);
+    return NextResponse.json(safeResult);
   } catch (error) {
     return NextResponse.json(
       {

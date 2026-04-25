@@ -1,6 +1,6 @@
 "use client";
 
-import { useSendTransaction, useWalletSession } from "@solana/react-hooks";
+import { useSendTransaction, useLookupTable, useWalletSession } from "@solana/react-hooks";
 import type { Address } from "@solana/addresses";
 import {
   buildCreateCourseInstruction,
@@ -21,6 +21,7 @@ import {
   findGlobalConfigPda,
   findSessionPda,
   findUserPda,
+  MXE_LUT_ADDRESS,
   type EncryptedContentKeyInput,
   type EncryptedExamInput,
   type FixedBytes32,
@@ -42,6 +43,7 @@ function ensureWallet(address: Address | undefined) {
 export function useProofArcium() {
   const wallet = useWalletSession();
   const transaction = useSendTransaction();
+  const lutQuery = useLookupTable(MXE_LUT_ADDRESS);
 
   function getAuthority() {
     if (!wallet) {
@@ -63,6 +65,7 @@ export function useProofArcium() {
       authority: wallet,
       feePayer,
       instructions: args.instructions,
+      version: 0,
     });
   }
 
@@ -138,7 +141,7 @@ export function useProofArcium() {
       examId: bigint | number | string;
       takeExamAccounts: TakeExamAccounts;
     }) {
-      return buildTakeExamInstruction(getAuthority(), args);
+      return buildTakeExamInstruction(getAuthority(), args, lutQuery.data);
     },
 
     getGradeExamCallbackInstruction(args: GradeExamCallbackAccounts & { output: GradeExamCallbackOutput }) {
