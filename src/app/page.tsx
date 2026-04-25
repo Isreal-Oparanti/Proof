@@ -3,10 +3,19 @@
 import Image from "next/image";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { useWalletConnection } from "@solana/react-hooks";
+import { useAccount, useWalletConnection } from "@solana/react-hooks";
 import toast from "react-hot-toast";
+import { AddExamDrawer } from "@/components/AddExamDrawer";
 import { useProofArcium } from "@/hooks/useProofArcium";
+import { useProofCourses } from "@/hooks/useProofCourses";
+import { useProofUsers } from "@/hooks/useProofUsers";
+import {
+  coerceAccountDataBytes,
+  decodeGlobalConfigAccount,
+  decodeUserAccount,
+  findGlobalConfigPda,
+  findUserPda,
+} from "@/lib/proofArcium";
 
 type UserRole = "student" | "tutor";
 
@@ -41,10 +50,10 @@ type PlanFailureLike = {
   transactionPlanResult?: PlanFailureLike;
 };
 
-const REGISTERED_PROFILE_STORAGE_KEY = "proof-registered-profile";
-
 const DEVNET_ENDPOINT =
   process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com";
+const MAX_USER_NAME_LENGTH = 64;
+const MAX_COURSE_TITLE_LENGTH = 100;
 
 function getLastLogLine(value: unknown): string | null {
   if (!value || typeof value !== "object") {
@@ -58,10 +67,6 @@ function getLastLogLine(value: unknown): string | null {
 
   if ("context" in value && value.context && typeof value.context === "object") {
     return getLastLogLine(value.context);
-  }
-
-  if ("cause" in value && value.cause) {
-    return getLastLogLine(value.cause);
   }
 
   return null;
@@ -81,6 +86,16 @@ function getMessageFromUnknownError(error: unknown): string | null {
   }
 
   return null;
+}
+
+function getCustomProgramErrorCode(error: unknown): number | null {
+  const message = getMessageFromUnknownError(error);
+  if (!message) {
+    return null;
+  }
+
+  const match = message.match(/custom program error: #(\d+)/i);
+  return match ? Number(match[1]) : null;
 }
 
 function getFirstFailedPlanError(plan: unknown): unknown {
@@ -124,8 +139,36 @@ function getDetailedErrorMessage(error: unknown, fallback: string) {
   return getMessageFromUnknownError(error) || fallback;
 }
 
+function isAlreadyProcessedError(error: unknown) {
+  const detailedMessage = getDetailedErrorMessage(error, "").toLowerCase();
+  const rawMessage = (getMessageFromUnknownError(error) || "").toLowerCase();
+
+  return detailedMessage.includes("already been processed") || rawMessage.includes("already been processed");
+}
+
+function hasFetchedOnChainAccount(account: ReturnType<typeof useAccount>) {
+  return Boolean(
+    account &&
+      typeof account === "object" &&
+      account.fetching === false &&
+      account.owner !== null &&
+      account.lamports !== null &&
+      account.data !== undefined,
+  );
+}
+
+function isMissingOnChainAccount(account: ReturnType<typeof useAccount>) {
+  return Boolean(
+    account &&
+      typeof account === "object" &&
+      account.fetching === false &&
+      account.owner === null &&
+      account.lamports === null &&
+      account.data === undefined,
+  );
+}
+
 export default function Home() {
-  const router = useRouter();
   const { status, wallet } = useWalletConnection();
   const proofArcium = useProofArcium();
   const [arciumStatus, setArciumStatus] = useState<ArciumStatus | null>(null);
@@ -137,11 +180,101 @@ export default function Home() {
     fullName: "",
     role: "student",
   });
-  const [registeredWalletAddress, setRegisteredWalletAddress] = useState<string | null>(null);
+  const [userPdaAddress, setUserPdaAddress] = useState<string | null>(null);
+  const [globalConfigAddress, setGlobalConfigAddress] = useState<string | null>(null);
+  const [isAddExamOpen, setIsAddExamOpen] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [courseTitle, setCourseTitle] = useState("");
+  const [selectedCourseForExam, setSelectedCourseForExam] = useState<null | {
+    courseId: bigint;
+    title: string;
+    tutor: string;
+    tutorName: string;
+  }>(null);
   const connectedWalletAddress = wallet?.account?.address?.toString() ?? null;
-  const isRegistered =
-    connectedWalletAddress !== null &&
-    registeredWalletAddress === connectedWalletAddress;
+  const courseQuery = useProofCourses();
+  const userProfilesQuery = useProofUsers();
+  const userAccount = useAccount(userPdaAddress ?? undefined, {
+    fetch: true,
+    skip: !userPdaAddress,
+    watch: true,
+  });
+  const globalConfigAccount = useAccount(globalConfigAddress ?? undefined, {
+    fetch: true,
+    skip: !globalConfigAddress,
+    watch: true,
+  });
+  const hasFetchedUserAccount = Boolean(
+    userAccount &&
+      typeof userAccount === "object" &&
+      userAccount.fetching === false,
+  );
+  const isRegisteredOnChain = Boolean(
+    hasFetchedUserAccount && hasFetchedOnChainAccount(userAccount),
+  );
+  const hasGlobalConfig = hasFetchedOnChainAccount(globalConfigAccount);
+  const isGlobalConfigMissing = isMissingOnChainAccount(globalConfigAccount);
+  const isGlobalConfigLoading = Boolean(globalConfigAccount?.fetching);
+  const decodedGlobalConfig = useMemo(() => {
+    const accountBytes =
+      globalConfigAccount && typeof globalConfigAccount === "object" && "data" in globalConfigAccount
+        ? coerceAccountDataBytes(globalConfigAccount.data)
+        : null;
+
+    if (!hasGlobalConfig || !accountBytes) {
+      return null;
+    }
+
+    try {
+      return decodeGlobalConfigAccount(accountBytes);
+    } catch (error) {
+      console.error("Failed to decode global config account", error);
+      return null;
+    }
+  }, [globalConfigAccount, hasGlobalConfig]);
+  const onChainProfile = useMemo(() => {
+    const accountBytes =
+      userAccount && typeof userAccount === "object" && "data" in userAccount
+        ? coerceAccountDataBytes(userAccount.data)
+        : null;
+
+    if (
+      !isRegisteredOnChain ||
+      !userAccount ||
+      typeof userAccount !== "object" ||
+      !accountBytes
+    ) {
+      return null;
+    }
+
+    try {
+      const decodedProfile = decodeUserAccount(accountBytes);
+      console.log("Fetched on-chain user profile (page)", decodedProfile);
+      // console.log("Readable on-chain user name (page)", decodedProfile.name);
+      // console.log("Readable on-chain user role (page)", decodedProfile.role);
+      return decodedProfile;
+    } catch (error) {
+      console.error("Failed to decode user account", {
+        error,
+        rawData: "data" in userAccount ? userAccount.data : null,
+        normalizedBytes: Array.from(accountBytes),
+      });
+      return null;
+    }
+  }, [isRegisteredOnChain, userAccount]);
+  const effectiveName = onChainProfile?.name ?? formData.fullName;
+  const effectiveRole = onChainProfile?.role ?? formData.role;
+  const isRegistered = connectedWalletAddress !== null && isRegisteredOnChain;
+  const isTutor = effectiveRole === "tutor";
+  const displayCourses = useMemo(() => courseQuery.courses, [courseQuery.courses]);
+  const nextExamId = useMemo(
+    () => (decodedGlobalConfig ? (decodedGlobalConfig.examCounter + BigInt(1)).toString() : null),
+    [decodedGlobalConfig],
+  );
+
+  useEffect(() => {
+    console.log("Displayed courses on home page", displayCourses);
+  }, [displayCourses]);
 
   useEffect(() => {
     let cancelled = false;
@@ -176,28 +309,103 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!connectedWalletAddress || typeof window === "undefined") {
-      return;
-    }
+    let cancelled = false;
 
-    const savedProfile = window.localStorage.getItem(
-      `${REGISTERED_PROFILE_STORAGE_KEY}:${connectedWalletAddress}`,
-    );
+    Promise.resolve()
+      .then(async () => {
+        if (!connectedWalletAddress) {
+          queueMicrotask(() => setUserPdaAddress(null));
+          return;
+        }
 
-    if (!savedProfile) {
-      return;
-    }
+        const pda = await findUserPda(connectedWalletAddress);
+        console.log("Derived user PDA (page)", {
+          walletAddress: connectedWalletAddress,
+          userPda: pda,
+        });
+        if (!cancelled) {
+          setUserPdaAddress(pda);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to derive user PDA", error);
+        if (!cancelled) {
+          setUserPdaAddress(null);
+        }
+      });
 
-    try {
-      const parsedProfile = JSON.parse(savedProfile) as RegistrationFormData;
-      setFormData(parsedProfile);
-      setRegisteredWalletAddress(connectedWalletAddress);
-    } catch {
-      window.localStorage.removeItem(
-        `${REGISTERED_PROFILE_STORAGE_KEY}:${connectedWalletAddress}`,
-      );
-    }
+    return () => {
+      cancelled = true;
+    };
   }, [connectedWalletAddress]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    Promise.resolve()
+      .then(async () => {
+        const pda = await findGlobalConfigPda();
+        if (!cancelled) {
+          setGlobalConfigAddress(pda);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to derive global config PDA", error);
+        if (!cancelled) {
+          setGlobalConfigAddress(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!userPdaAddress) {
+      return;
+    }
+
+    const accountBytes =
+      userAccount && typeof userAccount === "object" && "data" in userAccount
+        ? coerceAccountDataBytes(userAccount.data)
+        : null;
+
+    // console.log("Fetched raw user account (page)", {
+    //   userPdaAddress,
+    //   exists:
+    //     userAccount && typeof userAccount === "object" && "exists" in userAccount
+    //       ? userAccount.exists
+    //       : null,
+    //   fetching:
+    //     userAccount && typeof userAccount === "object" && "fetching" in userAccount
+    //       ? userAccount.fetching
+    //       : null,
+    //   owner:
+    //     userAccount && typeof userAccount === "object" && "owner" in userAccount
+    //       ? userAccount.owner
+    //       : null,
+    //   lamports:
+    //     userAccount && typeof userAccount === "object" && "lamports" in userAccount
+    //       ? userAccount.lamports
+    //       : null,
+    //   rawData:
+    //     userAccount && typeof userAccount === "object" && "data" in userAccount
+    //       ? userAccount.data
+    //       : null,
+    //   rawDataKeys:
+    //     userAccount &&
+    //     typeof userAccount === "object" &&
+    //     "data" in userAccount &&
+    //     userAccount.data &&
+    //     typeof userAccount.data === "object"
+    //       ? Object.keys(userAccount.data)
+    //       : null,
+    //   normalizedByteLength: accountBytes?.length ?? null,
+    //   normalizedBytePreview: accountBytes ? Array.from(accountBytes.slice(0, 24)) : null,
+    //   userAccount,
+    // });
+  }, [userAccount, userPdaAddress]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -208,37 +416,34 @@ export default function Home() {
       return;
     }
 
+    if (trimmedName.length > MAX_USER_NAME_LENGTH) {
+      toast.error(`Full name must be ${MAX_USER_NAME_LENGTH} characters or less.`);
+      return;
+    }
+
     if (!connectedWalletAddress) {
       toast.error("Connect a wallet before creating a profile.");
+      return;
+    }
+
+    if (isRegisteredOnChain) {
+      toast.success("This wallet already has a registered on-chain profile.");
       return;
     }
 
     proofArcium.reset();
 
     try {
-      await proofArcium.registerUser({
+      const instruction = await proofArcium.getRegisterUserInstruction({
         name: trimmedName,
         role: formData.role,
       });
-
-      if (typeof window !== "undefined") {
-        const registeredProfile = {
-          fullName: trimmedName,
-          role: formData.role,
-        } satisfies RegistrationFormData;
-
-        window.localStorage.setItem(
-          `${REGISTERED_PROFILE_STORAGE_KEY}:${connectedWalletAddress}`,
-          JSON.stringify(registeredProfile),
-        );
-        window.dispatchEvent(new Event("proof-profile-updated"));
-      }
+      await proofArcium.send({ instructions: [instruction] });
 
       setFormData((prev) => ({
         ...prev,
         fullName: trimmedName,
       }));
-      setRegisteredWalletAddress(connectedWalletAddress);
       toast.success(`Registered ${trimmedName} as ${formData.role}.`);
     } catch (error) {
       console.error("Registration transaction failed", error);
@@ -246,10 +451,130 @@ export default function Home() {
     }
   };
 
-  const goToCourses = () => {
-    if (status !== "connected" || !isRegistered) return;
-    const fullName = encodeURIComponent(formData.fullName.trim());
-    router.push(`/courses?role=${formData.role}&name=${fullName}`);
+  const createCourse = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const trimmedTitle = courseTitle.trim();
+    if (!trimmedTitle) {
+      return;
+    }
+
+    if (!connectedWalletAddress) {
+      toast.error("Connect a wallet before creating a course.");
+      return;
+    }
+
+    if (proofArcium.isSending) {
+      return;
+    }
+
+    if (isGlobalConfigLoading || !globalConfigAddress) {
+      toast.error("Program configuration is still loading. Try again in a moment.");
+      return;
+    }
+
+    if (trimmedTitle.length > MAX_COURSE_TITLE_LENGTH) {
+      toast.error(`Course title must be ${MAX_COURSE_TITLE_LENGTH} characters or less.`);
+      return;
+    }
+
+    if (!decodedGlobalConfig) {
+      toast.error("Unable to read the on-chain course counter.");
+      return;
+    }
+
+    const nextCourseId = (decodedGlobalConfig.courseCounter + BigInt(1)).toString();
+
+    proofArcium.reset();
+
+    try {
+      if (isGlobalConfigMissing) {
+        try {
+          const initializeInstruction = await proofArcium.getInitializeInstruction();
+          await proofArcium.send({ instructions: [initializeInstruction] });
+        } catch (error) {
+          const errorCode = getCustomProgramErrorCode(error);
+
+          console.error("Initialize transaction failed before createCourse", {
+            errorCode,
+            errorMessage: getMessageFromUnknownError(error),
+          });
+
+          if (errorCode !== 0 && errorCode !== 6000) {
+            throw error;
+          }
+        }
+      } else if (!hasGlobalConfig) {
+        toast.error("Program configuration is unavailable.");
+        return;
+      }
+
+      const instruction = await proofArcium.getCreateCourseInstruction({
+        courseId: nextCourseId,
+        title: trimmedTitle,
+      });
+      await proofArcium.send({ instructions: [instruction] });
+      await courseQuery.refresh();
+      setCourseTitle("");
+      setIsCreateOpen(false);
+      toast.success(`Created ${trimmedTitle}.`);
+    } catch (error) {
+      if (isAlreadyProcessedError(error)) {
+        await courseQuery.refresh();
+        setCourseTitle("");
+        setIsCreateOpen(false);
+        toast.success(`Created ${trimmedTitle}.`);
+        return;
+      }
+
+      console.error("Create course transaction failed", error);
+      console.error("Create course on-chain failure details", {
+        customProgramErrorCode: getCustomProgramErrorCode(error),
+        courseId: nextCourseId,
+        detailedMessage: getDetailedErrorMessage(error, "Failed to create course."),
+        errorMessage: getMessageFromUnknownError(error),
+        title: trimmedTitle,
+        transactionPlanResult:
+          error && typeof error === "object" && "transactionPlanResult" in error
+            ? error.transactionPlanResult
+            : null,
+      });
+      toast.error(getDetailedErrorMessage(error, "Failed to create course."));
+    }
+  };
+
+  const enrollInCourse = async (courseId: bigint, title: string) => {
+    if (!connectedWalletAddress) {
+      toast.error("Connect a wallet before enrolling in a course.");
+      return;
+    }
+
+    if (proofArcium.isSending) {
+      return;
+    }
+
+    proofArcium.reset();
+
+    try {
+      const instruction = await proofArcium.getEnrollInCourseInstruction({
+        courseId: courseId.toString(),
+      });
+      await proofArcium.send({ instructions: [instruction] });
+      toast.success(`Enrolled in ${title}.`);
+    } catch (error) {
+      console.error("Enroll course transaction failed", error);
+      toast.error(getDetailedErrorMessage(error, "Failed to enroll in course."));
+    }
+  };
+
+  const openAddExamDrawer = (course: {
+    courseId: bigint;
+    title: string;
+    tutor: string;
+    tutorName: string;
+  }) => {
+    setSelectedCourseForExam(course);
+    setIsAddExamOpen(true);
   };
 
   const walletAddress = useMemo(() => {
@@ -293,14 +618,155 @@ export default function Home() {
 
   return (
     <div className="min-h-screen pt-8 pb-12 font-[family:var(--font-geist-sans)]">
-      <div className="mx-auto w-full max-w-[1280px] px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full px-4 sm:px-6 lg:px-8">
         <main
           className={
             status === "connected" && !isRegistered
               ? "mx-auto flex min-h-[calc(100vh-8rem)] w-full items-center justify-center"
-              : "mx-auto grid min-h-[calc(100vh-8rem)] w-full max-w-[1200px] items-center gap-[clamp(1.5rem,4vw,4rem)] md:grid-cols-[1.1fr_1fr]"
+              : "mx-auto grid min-h-[calc(100vh-8rem)] w-full gap-8"
           }
         >
+          {isRegistered ? (
+            <section
+              style={{
+                width: "100%",
+                maxWidth: "1120px",
+                marginInline: "auto",
+                marginTop: "1.8rem",
+                justifySelf: "center",
+                alignSelf: "start",
+                alignContent: "start",
+              }}
+              className="grid gap-0"
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  alignItems: "flex-start",
+                  width: "100%",
+                  paddingTop: "2.15rem",
+                  marginBottom: "1.75rem",
+                }}
+              >
+                <button
+                  type="button"
+                  style={{
+                    height: "2.55rem",
+                    color: "var(--background)",
+                    WebkitTextFillColor: "var(--background)",
+                    opacity: 1,
+                  }}
+                  className="inline-flex min-w-[10.25rem] cursor-pointer items-center justify-center rounded-lg border border-[#253533] bg-[var(--secondary)] px-[1.1rem] text-center text-[0.95rem] font-semibold transition hover:-translate-y-px hover:bg-[#f3e7d8]"
+                  onClick={() => setIsCreateOpen(true)}
+                >
+                  Create Course
+                </button>
+              </div>
+              <section
+                style={{
+                  width: "100%",
+                  maxWidth: "1120px",
+                  marginInline: "auto",
+                  justifySelf: "center",
+                }}
+                className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
+              >
+                {courseQuery.isLoading ? (
+                  <article className="rounded-[0.95rem] border border-[#4a6460] bg-[linear-gradient(160deg,#2a3b39,#253533)] p-5 text-[0.95rem] text-[var(--secondary)]/80 md:col-span-2 xl:col-span-3">
+                    Loading courses...
+                  </article>
+                ) : displayCourses.length === 0 ? (
+                  <article className="rounded-[0.95rem] border border-[#4a6460] bg-[linear-gradient(160deg,#2a3b39,#253533)] p-5 text-[0.95rem] text-[var(--secondary)]/80 md:col-span-2 xl:col-span-3">
+                    {isTutor ? "No courses created on-chain yet." : "No published courses found yet."}
+                  </article>
+                ) : (
+                  displayCourses.map((course) => {
+                    const tutorLabel =
+                      course.tutorName || `${course.tutor.slice(0, 4)}...${course.tutor.slice(-4)}`;
+                    const isOwnerTutor = isTutor && connectedWalletAddress === course.tutor;
+                    const shouldShowEnroll = !isTutor;
+                    const actionDisabled = isTutor && !isOwnerTutor;
+
+                    return (
+                    <article
+                      key={course.address}
+                      style={{
+                        borderRadius: "0.7rem",
+                        gap: "0.85rem",
+                        padding: "1.1rem 1.15rem",
+                      }}
+                      className="grid border border-[#4a6460] bg-[linear-gradient(160deg,#2a3b39,#253533)]"
+                    >
+                      <h2 className="m-0 text-[1.08rem] font-semibold leading-[1.35] text-[var(--secondary)]">
+                        {course.title}
+                      </h2>
+                      <p style={{ margin: 0 }} className="text-[0.92rem] text-[var(--secondary)]/78">
+                        Tutor: {tutorLabel}
+                      </p>
+                      <p style={{ margin: 0 }} className="text-[0.92rem] text-[var(--secondary)]/78">
+                        Status: {course.active ? "Active" : "Inactive"}
+                      </p>
+                      <p style={{ margin: 0 }} className="break-all text-[0.82rem] text-[var(--secondary)]/62">
+                        Tutor wallet: {course.tutor}
+                      </p>
+                      <div style={{ paddingTop: "0.35rem" }}>
+                        {shouldShowEnroll ? (
+                          <button
+                            type="button"
+                            style={{
+                              minHeight: "2.5rem",
+                              padding: "0.68rem 1rem",
+                              borderRadius: "0.58rem",
+                            }}
+                            className="inline-flex cursor-pointer items-center justify-center border border-[#93ab9c] bg-[var(--secondary)] text-[0.9rem] font-semibold text-[#102320] transition hover:bg-[#f3e7d8]"
+                            onClick={() => void enrollInCourse(course.courseId, course.title)}
+                            disabled={proofArcium.isSending}
+                          >
+                            {proofArcium.isSending ? "Enrolling..." : "Enroll"}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            style={{
+                              minHeight: "2.5rem",
+                              padding: "0.68rem 1rem",
+                              borderRadius: "0.58rem",
+                              background: actionDisabled ? "#e5dfd6" : "var(--secondary)",
+                              borderColor: actionDisabled ? "#a2aea1" : "#93ab9c",
+                              color: actionDisabled ? "#54635d" : "#102320",
+                              opacity: actionDisabled ? 0.92 : 1,
+                              pointerEvents: actionDisabled ? "none" : "auto",
+                              cursor: actionDisabled ? "not-allowed" : "pointer",
+                            }}
+                            className="inline-flex cursor-pointer items-center justify-center border border-[#93ab9c] bg-[var(--secondary)] text-[0.9rem] font-semibold text-[#102320] transition hover:bg-[#f3e7d8]"
+                            onClick={() => {
+                              if (actionDisabled) {
+                                return;
+                              }
+
+                              openAddExamDrawer({
+                                courseId: course.courseId,
+                                title: course.title,
+                                tutor: course.tutor,
+                                tutorName: course.tutorName,
+                              });
+                            }}
+                            aria-disabled={actionDisabled}
+                            title={actionDisabled ? "Only the course owner can add an exam." : "Add an exam for this course"}
+                          >
+                            Add Exam
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                    );
+                  })
+                )}
+              </section>
+            </section>
+          ) : null}
+
           {status === "connected" && !isRegistered ? (
             <section className="flex w-full items-center justify-center py-6">
               <div
@@ -387,6 +853,87 @@ export default function Home() {
           ) : null}
         </main>
       </div>
+
+      <AddExamDrawer
+        course={selectedCourseForExam}
+        nextExamId={nextExamId}
+        onClose={() => {
+          setIsAddExamOpen(false);
+          setSelectedCourseForExam(null);
+        }}
+        open={isAddExamOpen}
+        tutorDisplayName={effectiveName}
+      />
+
+      {isRegistered && isCreateOpen ? (
+        <div
+          className="fixed inset-0 z-20 grid place-items-center bg-[rgba(4,11,10,0.62)]"
+          onClick={() => setIsCreateOpen(false)}
+        >
+          <div
+            style={{ padding: "18px 20px" }}
+            className="w-full max-w-[460px] rounded-[0.95rem] border border-[#bdc79f] bg-[var(--secondary)] shadow-[0_18px_40px_rgba(5,14,13,0.4)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2
+              style={{ marginBottom: "4px" }}
+              className="text-[1.6rem] leading-none tracking-[0.02em] text-[#233525]"
+            >
+              Create Course
+            </h2>
+            <p className="text-[0.95rem] text-[#3e4f3d]">
+              Add a new course shell for your registered profile.
+            </p>
+            <form
+              onSubmit={createCourse}
+              style={{ marginTop: "12px" }}
+              className="rounded-[0.85rem] bg-[rgba(255,255,255,0.2)]"
+            >
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "14px",
+                  padding: "14px 18px",
+                }}
+                className="sm:px-10 sm:py-7"
+              >
+                <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                  <label htmlFor="courseTitle" className="text-[0.98rem] font-semibold text-[#243527]">
+                    Course title
+                  </label>
+                  <input
+                    id="courseTitle"
+                    type="text"
+                    value={courseTitle}
+                    style={{ paddingInline: "20px" }}
+                    onChange={(event) => setCourseTitle(event.target.value)}
+                    placeholder="e.g. Solana Basics"
+                    className="min-h-[3.1rem] w-full rounded-[0.65rem] border border-[#b6c3a3] bg-[var(--secondary)] py-[0.8rem] text-[1rem] text-[#1b2c1d] outline-none placeholder:text-[#94a08f] focus:border-[#2f4331] focus:ring-2 focus:ring-[rgba(35,53,37,0.2)]"
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  style={{
+                    marginTop: "0",
+                    background: "#0f1f1d",
+                    borderColor: "#89a391",
+                    color: proofArcium.isSending ? "#9fd39f" : "var(--secondary)",
+                    cursor: proofArcium.isSending ? "not-allowed" : "pointer",
+                    opacity: 1,
+                  }}
+                  className="inline-flex min-h-[3rem] min-w-[12rem] items-center justify-center rounded-[0.72rem] border px-6 py-[0.8rem] text-[1rem] font-semibold tracking-[0.02em] transition hover:-translate-y-px hover:brightness-110 disabled:cursor-not-allowed"
+                  disabled={proofArcium.isSending}
+                >
+                  {proofArcium.isSending ? "Saving..." : "Save Course"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

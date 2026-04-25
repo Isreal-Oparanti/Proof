@@ -51,7 +51,7 @@ export function WalletConnectionButton({
       <button
         type="button"
         className={[
-          "inline-flex min-h-[3rem] items-center justify-center rounded-lg px-6 py-2.5 text-center text-[0.95rem] font-bold tracking-[0.03em]",
+          "inline-flex min-h-[3rem] items-center justify-center rounded-lg border border-[#253533] bg-[var(--secondary)] px-6 py-2.5 text-center text-[0.95rem] font-bold tracking-[0.03em] text-[var(--background)] disabled:cursor-not-allowed",
           className,
         ]
           .filter(Boolean)
@@ -85,7 +85,7 @@ export function WalletConnectionButton({
               </p>
               <button
                 type="button"
-                className="w-full cursor-pointer  rounded-xl border border-[#253533] bg-[var(--secondary)] px-4 py-3 text-left text-sm font-medium text-[#253533] transition hover:bg-[#f3e7d8] disabled:cursor-progress disabled:opacity-70"
+                className="w-full cursor-pointer  text-red-400 rounded-xl border border-[#253533] bg-[var(--secondary)] px-4 py-3 text-left text-sm font-medium text-[#253533] transition hover:bg-[#f3e7d8] disabled:cursor-progress disabled:opacity-70"
                 onClick={async () => {
                   setIsDisconnecting(true);
                   try {

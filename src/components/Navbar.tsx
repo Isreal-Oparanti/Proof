@@ -4,20 +4,14 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useWalletConnection } from "@solana/react-hooks";
+import { useAccount, useWalletConnection } from "@solana/react-hooks";
+import { coerceAccountDataBytes, decodeUserAccount, findUserPda } from "@/lib/proofArcium";
 
 type NavbarProps = {
   homeHref?: string;
   displayName?: string;
   role?: string;
 };
-
-type RegisteredProfile = {
-  fullName: string;
-  role: "student" | "tutor";
-};
-
-const REGISTERED_PROFILE_STORAGE_KEY = "proof-registered-profile";
 
 function shortenAddress(address: string) {
   return `${address.slice(0, 4)}...${address.slice(-4)}`;
@@ -26,14 +20,55 @@ function shortenAddress(address: string) {
 export function Navbar({ homeHref = "/", displayName, role }: NavbarProps) {
   const router = useRouter();
   const [isDisconnecting, setIsDisconnecting] = useState(false);
-  const [registeredProfile, setRegisteredProfile] = useState<RegisteredProfile | null>(null);
+  const [userPdaAddress, setUserPdaAddress] = useState<string | null>(null);
   const { connect, connected, connecting, connectors, disconnect, isReady, status, wallet } =
     useWalletConnection();
   const isAppNav = Boolean(displayName && role);
-  const roleLabel = role === "tutor" ? "Tutor" : "Student";
   const defaultConnector = connectors[0];
   const walletAddress = wallet?.account?.address?.toString();
-  const profileRole = registeredProfile?.role ?? null;
+  const userAccount = useAccount(userPdaAddress ?? undefined, {
+    fetch: true,
+    skip: !userPdaAddress,
+    watch: true,
+  });
+  const onChainProfile = useMemo(() => {
+    const accountBytes =
+      userAccount && typeof userAccount === "object" && "data" in userAccount
+        ? coerceAccountDataBytes(userAccount.data)
+        : null;
+
+    if (
+      !walletAddress ||
+      !userAccount ||
+      typeof userAccount !== "object" ||
+      userAccount.fetching ||
+      userAccount.owner === null ||
+      userAccount.lamports === null ||
+      userAccount.data === undefined ||
+      !accountBytes
+    ) {
+      return null;
+    }
+
+    try {
+      const decodedProfile = decodeUserAccount(accountBytes);
+      // console.log("Fetched on-chain user profile (navbar)", decodedProfile);
+      // console.log("Readable on-chain user name (navbar)", decodedProfile.name);
+      // console.log("Readable on-chain user role (navbar)", decodedProfile.role);
+      return decodedProfile;
+    } catch (error) {
+      console.error("Failed to decode navbar user account", {
+        error,
+        rawData: "data" in userAccount ? userAccount.data : null,
+        normalizedBytes: Array.from(accountBytes),
+      });
+      return null;
+    }
+  }, [userAccount, walletAddress]);
+  const resolvedDisplayName = displayName ?? onChainProfile?.name ?? null;
+  const resolvedRole = role ?? onChainProfile?.role ?? null;
+  const roleLabel = resolvedRole === "tutor" ? "Tutor" : "Student";
+  const profileRole = resolvedRole;
   const profileRoleLabel = profileRole === "tutor" ? "Tutor" : "Student";
   const roleDotColor = profileRole === "student" ? "#7c3aed" : "#16a34a";
 
@@ -47,43 +82,84 @@ export function Navbar({ homeHref = "/", displayName, role }: NavbarProps) {
     return params.toString();
   }, [displayName, isAppNav, role]);
 
-  const brandHref = isAppNav ? `/courses?${sessionQuery}` : homeHref;
+  const brandHref = isAppNav ? `/?${sessionQuery}` : homeHref;
 
   useEffect(() => {
-    if (!walletAddress || typeof window === "undefined") {
-      setRegisteredProfile(null);
+    let cancelled = false;
+
+    Promise.resolve()
+      .then(async () => {
+        if (!walletAddress) {
+          queueMicrotask(() => setUserPdaAddress(null));
+          return;
+        }
+
+        const pda = await findUserPda(walletAddress);
+        console.log("Derived user PDA (navbar)", {
+          walletAddress,
+          userPda: pda,
+        });
+        if (!cancelled) {
+          setUserPdaAddress(pda);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to derive navbar user PDA", error);
+        if (!cancelled) {
+          setUserPdaAddress(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [walletAddress]);
+
+  useEffect(() => {
+    if (!userPdaAddress) {
       return;
     }
 
-    const syncRegisteredProfile = () => {
-      const savedProfile = window.localStorage.getItem(
-        `${REGISTERED_PROFILE_STORAGE_KEY}:${walletAddress}`,
-      );
+    const accountBytes =
+      userAccount && typeof userAccount === "object" && "data" in userAccount
+        ? coerceAccountDataBytes(userAccount.data)
+        : null;
 
-      if (!savedProfile) {
-        setRegisteredProfile(null);
-        return;
-      }
-
-      try {
-        setRegisteredProfile(JSON.parse(savedProfile) as RegisteredProfile);
-      } catch {
-        window.localStorage.removeItem(
-          `${REGISTERED_PROFILE_STORAGE_KEY}:${walletAddress}`,
-        );
-        setRegisteredProfile(null);
-      }
-    };
-
-    syncRegisteredProfile();
-    window.addEventListener("proof-profile-updated", syncRegisteredProfile);
-    window.addEventListener("storage", syncRegisteredProfile);
-
-    return () => {
-      window.removeEventListener("proof-profile-updated", syncRegisteredProfile);
-      window.removeEventListener("storage", syncRegisteredProfile);
-    };
-  }, [walletAddress]);
+    console.log("Fetched raw user account (navbar)", {
+      userPdaAddress,
+      exists:
+        userAccount && typeof userAccount === "object" && "exists" in userAccount
+          ? userAccount.exists
+          : null,
+      fetching:
+        userAccount && typeof userAccount === "object" && "fetching" in userAccount
+          ? userAccount.fetching
+          : null,
+      owner:
+        userAccount && typeof userAccount === "object" && "owner" in userAccount
+          ? userAccount.owner
+          : null,
+      lamports:
+        userAccount && typeof userAccount === "object" && "lamports" in userAccount
+          ? userAccount.lamports
+          : null,
+      rawData:
+        userAccount && typeof userAccount === "object" && "data" in userAccount
+          ? userAccount.data
+          : null,
+      rawDataKeys:
+        userAccount &&
+        typeof userAccount === "object" &&
+        "data" in userAccount &&
+        userAccount.data &&
+        typeof userAccount.data === "object"
+          ? Object.keys(userAccount.data)
+          : null,
+      normalizedByteLength: accountBytes?.length ?? null,
+      normalizedBytePreview: accountBytes ? Array.from(accountBytes.slice(0, 24)) : null,
+      userAccount,
+    });
+  }, [userAccount, userPdaAddress]);
 
   return (
     <header
@@ -97,7 +173,7 @@ export function Navbar({ homeHref = "/", displayName, role }: NavbarProps) {
           ? "flex min-h-[3.5rem] w-full items-center justify-between gap-4 rounded-[0.9rem] bg-[var(--secondary)] px-6 py-[0.7rem] max-[680px]:flex-col max-[680px]:items-start max-[680px]:px-4 sm:px-7"
           : "flex min-h-[4.2rem] w-full items-center justify-between gap-6 rounded-[0.9rem] bg-[var(--secondary)] px-6 py-[0.72rem] max-[640px]:px-4 sm:px-7"}
       >
-        <div className={isAppNav ? "flex items-center gap-[0.65rem]" : undefined}>
+        <div className="flex items-center gap-[0.65rem]">
           <Link
             href={brandHref}
             className={isAppNav ? "text-base tracking-[0.03em] text-[#253533]" : "inline-flex items-center text-base tracking-[0.03em] text-[#253533]"}
@@ -106,9 +182,9 @@ export function Navbar({ homeHref = "/", displayName, role }: NavbarProps) {
             Proof
           </Link>
 
-          {isAppNav ? (
+          {resolvedDisplayName && resolvedRole ? (
             <>
-              <span className="text-[0.92rem] text-[#253533]">Hi, {displayName}</span>
+              <span className="text-[0.92rem] text-[#253533]">Hi, {resolvedDisplayName}</span>
               <span className="rounded-full border border-[#253533] bg-[#253533] px-[0.6rem] py-[0.3rem] text-[0.78rem] font-bold text-[var(--secondary)]">
                 {roleLabel}
               </span>
@@ -123,28 +199,12 @@ export function Navbar({ homeHref = "/", displayName, role }: NavbarProps) {
         >
           {connected && walletAddress ? (
             <>
-              {!isAppNav && registeredProfile ? (
-                <div className="flex items-center gap-[0.65rem] rounded-[0.8rem] border border-[#c8d2bf] bg-[rgba(255,248,240,0.72)] px-3 py-[0.55rem] text-[#253533]">
-                  <div className="min-w-0">
-                    <p className="max-w-[10rem] truncate text-[0.9rem] font-semibold leading-none text-[#253533]">
-                      {registeredProfile.fullName}
-                    </p>
-                    <div className="mt-1 flex items-center gap-2 text-[0.8rem] font-medium text-[#51614f]">
-                      <span
-                        className="inline-block h-2.5 w-2.5 rounded-full"
-                        style={{ backgroundColor: roleDotColor }}
-                      />
-                      <span>{profileRoleLabel}</span>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
               <span className="text-[0.9rem] font-semibold tracking-[0.02em] text-[#253533]">
                 {shortenAddress(walletAddress)}
               </span>
               <button
                 type="button"
-                className="inline-flex min-h-[2.75rem] min-w-[10.5rem] cursor-pointer items-center justify-center rounded-lg border border-[#253533] bg-[#253533] px-5 py-[0.7rem] text-center text-[0.85rem] font-semibold text-[var(--secondary)] transition hover:-translate-y-px hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-55"
+                className="inline-flex min-h-[2.75rem] min-w-[10.5rem] cursor-pointer items-center justify-center rounded-lg border border-[#253533] bg-[#253533] px-5 py-[0.7rem] text-center text-[0.85rem] font-semibold text-[var(--secondary)] transition hover:-translate-y-px hover:brightness-110 disabled:cursor-not-allowed"
                 onClick={async () => {
                   setIsDisconnecting(true);
                   try {
@@ -165,10 +225,15 @@ export function Navbar({ homeHref = "/", displayName, role }: NavbarProps) {
           ) : (
             <button
               type="button"
+              style={{
+                color: "var(--background)",
+                opacity: 1,
+                WebkitTextFillColor: "var(--background)",
+              }}
               className={
                 isAppNav
-                  ? "inline-flex min-h-[2.8rem] min-w-[11rem] cursor-pointer items-center justify-center rounded-lg border border-[#253533] bg-[var(--secondary)] px-[1.3rem] py-[0.72rem] text-center text-[0.96rem] font-semibold text-[#253533] disabled:cursor-not-allowed disabled:opacity-55"
-                  : "inline-flex min-h-[2.9rem] min-w-[11.5rem] cursor-pointer items-center justify-center rounded-lg border border-[#253533] bg-[var(--secondary)] px-[1.45rem] py-[0.75rem] text-center text-[1rem] font-semibold text-[#253533] transition hover:-translate-y-px hover:bg-[#f3e7d8] disabled:cursor-not-allowed disabled:opacity-55"
+                  ? "inline-flex min-h-[2.8rem] min-w-[11rem] cursor-pointer items-center justify-center rounded-lg border border-[#253533] bg-[var(--secondary)] px-[1.3rem] py-[0.72rem] text-center text-[0.96rem] font-semibold disabled:cursor-not-allowed"
+                  : "inline-flex min-h-[2.9rem] min-w-[11.5rem] cursor-pointer items-center justify-center rounded-lg border border-[#253533] bg-[var(--secondary)] px-[1.45rem] py-[0.75rem] text-center text-[1rem] font-semibold transition hover:-translate-y-px hover:bg-[#f3e7d8] disabled:cursor-not-allowed"
               }
               onClick={async () => {
                 if (!isReady || connecting || !defaultConnector) {

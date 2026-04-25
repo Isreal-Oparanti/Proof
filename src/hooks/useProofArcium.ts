@@ -43,20 +43,26 @@ export function useProofArcium() {
   const wallet = useWalletSession();
   const transaction = useSendTransaction();
 
-  async function sendInstruction(
-    buildInstruction: (authority: Address) => Promise<Awaited<ReturnType<typeof buildInitializeInstruction>>>,
-  ) {
+  function getAuthority() {
     if (!wallet) {
       throw new Error("Connect a wallet before sending Proof Arcium transactions.");
     }
 
-    const feePayer = ensureWallet(wallet.account.address);
-    const instruction = await buildInstruction(feePayer);
+    return ensureWallet(wallet.account.address);
+  }
 
+  async function send(args: {
+    instructions: Awaited<ReturnType<typeof buildInitializeInstruction>>[];
+  }) {
+    if (!wallet) {
+      throw new Error("Connect a wallet before sending Proof Arcium transactions.");
+    }
+
+    const feePayer = getAuthority();
     return transaction.send({
       authority: wallet,
       feePayer,
-      instructions: [instruction],
+      instructions: args.instructions,
     });
   }
 
@@ -76,68 +82,67 @@ export function useProofArcium() {
     findGlobalConfigPda,
     findSessionPda,
     findUserPda,
+    send,
 
-    initialize() {
-      return sendInstruction((authority) => buildInitializeInstruction(authority));
+    getInitializeInstruction() {
+      return buildInitializeInstruction(getAuthority());
     },
 
-    registerUser(args: { name: string; role: ProofArciumRole }) {
-      return sendInstruction((authority) => buildRegisterUserInstruction(authority, args));
+    getRegisterUserInstruction(args: { name: string; role: ProofArciumRole }) {
+      return buildRegisterUserInstruction(getAuthority(), args);
     },
 
-    createCourse(args: { courseId: bigint | number | string; title: string }) {
-      return sendInstruction((authority) => buildCreateCourseInstruction(authority, args));
+    getCreateCourseInstruction(args: { courseId: bigint | number | string; title: string }) {
+      return buildCreateCourseInstruction(getAuthority(), args);
     },
 
-    createExam(args: {
+    getCreateExamInstruction(args: {
       courseId: bigint | number | string;
       encryptedExam: EncryptedExamInput;
       examId: bigint | number | string;
       questionCount: number;
       title: string;
     }) {
-      return sendInstruction((authority) => buildCreateExamInstruction(authority, args));
+      return buildCreateExamInstruction(getAuthority(), args);
     },
 
-    enrollInCourse(args: { courseId: bigint | number | string }) {
-      return sendInstruction((authority) => buildEnrollInCourseInstruction(authority, args));
+    getEnrollInCourseInstruction(args: { courseId: bigint | number | string }) {
+      return buildEnrollInCourseInstruction(getAuthority(), args);
     },
 
-    requestExamAccess(args: {
+    getRequestExamAccessInstruction(args: {
       courseId: bigint | number | string;
       examId: bigint | number | string;
       studentContentPubkey: FixedBytes32;
     }) {
-      return sendInstruction((authority) => buildRequestExamAccessInstruction(authority, args));
+      return buildRequestExamAccessInstruction(getAuthority(), args);
     },
 
-    grantExamAccess(args: {
+    getGrantExamAccessInstruction(args: {
       courseId: bigint | number | string;
       encryptedContentKey: EncryptedContentKeyInput;
       examId: bigint | number | string;
       student: Address | string;
     }) {
-      return sendInstruction((authority) => buildGrantExamAccessInstruction(authority, args));
+      return buildGrantExamAccessInstruction(getAuthority(), args);
     },
 
-    initGradeExamCompDef(args: Omit<InitGradeExamCompDefAccounts, "payer">) {
-      return sendInstruction((authority) =>
-        buildInitGradeExamCompDefInstruction({ ...args, payer: authority }),
-      );
+    getInitGradeExamCompDefInstruction(args: Omit<InitGradeExamCompDefAccounts, "payer">) {
+      return buildInitGradeExamCompDefInstruction({ ...args, payer: getAuthority() });
     },
 
-    takeExam(args: {
+    getTakeExamInstruction(args: {
       answers: Uint8Array | readonly number[];
       computationOffset: bigint | number | string;
       courseId: bigint | number | string;
       examId: bigint | number | string;
       takeExamAccounts: TakeExamAccounts;
     }) {
-      return sendInstruction((authority) => buildTakeExamInstruction(authority, args));
+      return buildTakeExamInstruction(getAuthority(), args);
     },
 
-    gradeExamCallback(args: GradeExamCallbackAccounts & { output: GradeExamCallbackOutput }) {
-      return sendInstruction(async () => buildGradeExamCallbackInstruction(args));
+    getGradeExamCallbackInstruction(args: GradeExamCallbackAccounts & { output: GradeExamCallbackOutput }) {
+      return buildGradeExamCallbackInstruction(args);
     },
   };
 }

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import "antd/dist/reset.css";
 import "./globals.css";
 import { AppLayoutShell } from "../components/AppLayoutShell";
 import { AppProviders } from "../components/providers/AppProviders";
@@ -17,7 +18,7 @@ type RootLayoutProps = {
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
-      <body>
+      <body suppressHydrationWarning>
         <AppProviders>
           <AppLayoutShell>{children}</AppLayoutShell>
         </AppProviders>

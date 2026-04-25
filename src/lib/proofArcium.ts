@@ -1,4 +1,10 @@
-import { address, getAddressEncoder, getProgramDerivedAddress, type Address } from "@solana/addresses";
+import {
+  address,
+  getAddressDecoder,
+  getAddressEncoder,
+  getProgramDerivedAddress,
+  type Address,
+} from "@solana/addresses";
 import { AccountRole, type Instruction } from "@solana/instructions";
 
 export const PROOF_ARCIUM_PROGRAM_ID = address(
@@ -20,6 +26,7 @@ export const DEFAULT_CLOCK_ACCOUNT = address(
 );
 
 const addressEncoder = getAddressEncoder();
+const addressDecoder = getAddressDecoder();
 
 const DISCRIMINATORS = {
   createCourse: [120, 121, 154, 164, 107, 180, 167, 241],
@@ -34,6 +41,12 @@ const DISCRIMINATORS = {
   takeExam: [23, 26, 175, 45, 43, 91, 213, 125],
 } as const;
 
+const ACCOUNT_DISCRIMINATORS = {
+  course: [206, 6, 78, 228, 163, 138, 241, 106],
+  globalConfig: [149, 8, 156, 202, 160, 252, 176, 217],
+  user: [159, 117, 95, 227, 239, 151, 58, 236],
+} as const;
+
 const SEEDS = {
   arciumSigner: "ArciumSignerAccount",
   course: "course",
@@ -46,6 +59,28 @@ const SEEDS = {
 } as const;
 
 export type ProofArciumRole = "tutor" | "student";
+
+export type ProofUserAccount = {
+  authority: string;
+  name: string;
+  role: ProofArciumRole;
+};
+
+export type ProofGlobalConfigAccount = {
+  authority: string;
+  bump: number;
+  courseCounter: bigint;
+  examCounter: bigint;
+};
+
+export type ProofCourseAccount = {
+  active: boolean;
+  bump: number;
+  courseId: bigint;
+  title: string;
+  tutor: string;
+  tutorName: string;
+};
 
 export type FixedBytes32 = readonly number[] | Uint8Array;
 
@@ -212,6 +247,186 @@ function encodeByteArray(bytes: Uint8Array) {
 
 function encodeRole(role: ProofArciumRole) {
   return encodeU8(role === "tutor" ? 0 : 1);
+}
+
+function decodeBase64Bytes(value: string): Uint8Array | null {
+  if (typeof globalThis.atob === "function") {
+    const decoded = globalThis.atob(value);
+    return Uint8Array.from(decoded, (char) => char.charCodeAt(0));
+  }
+
+  if (typeof Buffer !== "undefined") {
+    return Uint8Array.from(Buffer.from(value, "base64"));
+  }
+
+  return null;
+}
+
+export function coerceAccountDataBytes(data: unknown): Uint8Array | null {
+  if (data instanceof Uint8Array) {
+    return data;
+  }
+
+  if (ArrayBuffer.isView(data)) {
+    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  }
+
+  if (data instanceof ArrayBuffer) {
+    return new Uint8Array(data);
+  }
+
+  if (Array.isArray(data) && data.every((value) => typeof value === "number")) {
+    return Uint8Array.from(data);
+  }
+
+  if (data && typeof data === "object") {
+    if (
+      "data" in data &&
+      Array.isArray(data.data) &&
+      data.data.length >= 2 &&
+      typeof data.data[0] === "string" &&
+      data.data[1] === "base64"
+    ) {
+      return decodeBase64Bytes(data.data[0]);
+    }
+
+    const values = Object.values(data);
+    if (values.length > 0 && values.every((value) => typeof value === "number")) {
+      return Uint8Array.from(values);
+    }
+  }
+
+  return null;
+}
+
+export function decodeUserAccount(data: Uint8Array | readonly number[]): ProofUserAccount {
+  const bytes = data instanceof Uint8Array ? data : Uint8Array.from(data);
+  const discriminator = Uint8Array.from(ACCOUNT_DISCRIMINATORS.user);
+
+  if (bytes.length < 8 + 32 + 4 + 1) {
+    throw new Error("User account data is too short.");
+  }
+
+  for (let index = 0; index < discriminator.length; index += 1) {
+    if (bytes[index] !== discriminator[index]) {
+      throw new Error("Invalid user account discriminator.");
+    }
+  }
+
+  let offset = 8;
+  const authority = addressDecoder.decode(bytes.slice(offset, offset + 32));
+  offset += 32;
+
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const nameLength = view.getUint32(offset, true);
+  offset += 4;
+
+  if (offset + nameLength + 1 > bytes.length) {
+    throw new Error("User account name length is out of bounds.");
+  }
+
+  const nameBytes = bytes.slice(offset, offset + nameLength);
+  offset += nameLength;
+
+  const roleByte = bytes[offset];
+  const role: ProofArciumRole = roleByte === 0 ? "tutor" : "student";
+
+  return {
+    authority,
+    name: new TextDecoder().decode(nameBytes),
+    role,
+  };
+}
+
+export function decodeGlobalConfigAccount(
+  data: Uint8Array | readonly number[],
+): ProofGlobalConfigAccount {
+  const bytes = data instanceof Uint8Array ? data : Uint8Array.from(data);
+  const discriminator = Uint8Array.from(ACCOUNT_DISCRIMINATORS.globalConfig);
+
+  if (bytes.length < 8 + 32 + 8 + 8 + 1) {
+    throw new Error("Global config account data is too short.");
+  }
+
+  for (let index = 0; index < discriminator.length; index += 1) {
+    if (bytes[index] !== discriminator[index]) {
+      throw new Error("Invalid global config account discriminator.");
+    }
+  }
+
+  let offset = 8;
+  const authority = addressDecoder.decode(bytes.slice(offset, offset + 32));
+  offset += 32;
+
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const courseCounter = view.getBigUint64(offset, true);
+  offset += 8;
+  const examCounter = view.getBigUint64(offset, true);
+  offset += 8;
+  const bump = bytes[offset];
+
+  return {
+    authority,
+    bump,
+    courseCounter,
+    examCounter,
+  };
+}
+
+export function decodeCourseAccount(data: Uint8Array | readonly number[]): ProofCourseAccount {
+  const bytes = data instanceof Uint8Array ? data : Uint8Array.from(data);
+  const discriminator = Uint8Array.from(ACCOUNT_DISCRIMINATORS.course);
+
+  if (bytes.length < 8 + 8 + 32 + 4) {
+    throw new Error("Course account data is too short.");
+  }
+
+  for (let index = 0; index < discriminator.length; index += 1) {
+    if (bytes[index] !== discriminator[index]) {
+      throw new Error("Invalid course account discriminator.");
+    }
+  }
+
+  let offset = 8;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const courseId = view.getBigUint64(offset, true);
+  offset += 8;
+
+  const titleLength = view.getUint32(offset, true);
+  offset += 4;
+
+  if (offset + titleLength + 32 + 4 + 1 + 1 > bytes.length) {
+    throw new Error("Course account title length is out of bounds.");
+  }
+
+  const titleBytes = bytes.slice(offset, offset + titleLength);
+  offset += titleLength;
+
+  const tutor = addressDecoder.decode(bytes.slice(offset, offset + 32));
+  offset += 32;
+
+  const tutorNameLength = view.getUint32(offset, true);
+  offset += 4;
+
+  if (offset + tutorNameLength + 1 + 1 > bytes.length) {
+    throw new Error("Course account tutor name length is out of bounds.");
+  }
+
+  const tutorNameBytes = bytes.slice(offset, offset + tutorNameLength);
+  offset += tutorNameLength;
+
+  const active = bytes[offset] === 1;
+  offset += 1;
+  const bump = bytes[offset];
+
+  return {
+    active,
+    bump,
+    courseId,
+    title: new TextDecoder().decode(titleBytes),
+    tutor,
+    tutorName: new TextDecoder().decode(tutorNameBytes),
+  };
 }
 
 function encodeEncryptedContentKeyInput(value: EncryptedContentKeyInput) {
