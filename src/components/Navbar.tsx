@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAccount, useWalletConnection } from "@solana/react-hooks";
@@ -20,6 +20,8 @@ function shortenAddress(address: string) {
 export function Navbar({ homeHref = "/", displayName, role }: NavbarProps) {
   const router = useRouter();
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const copyTimeoutRef = useRef<number | null>(null);
   const [userPdaAddress, setUserPdaAddress] = useState<string | null>(null);
   const { connect, connected, connecting, connectors, disconnect, isReady, status, wallet } =
     useWalletConnection();
@@ -185,7 +187,10 @@ export function Navbar({ homeHref = "/", displayName, role }: NavbarProps) {
           {resolvedDisplayName && resolvedRole ? (
             <>
               <span className="text-[0.92rem] text-[#253533]">Hi, {resolvedDisplayName}</span>
-              <span className="rounded-full border border-[#253533] bg-[#253533] px-[0.6rem] py-[0.3rem] text-[0.78rem] font-bold text-[var(--secondary)]">
+              <span
+              // style={{ backgroundColor: roleDotColor }}
+              style={{ padding: "5px" }}
+              className="rounded-full  border border-[#253533] bg-[#253533] px-[0.6rem] py-[0.3rem] text-[0.78rem] font-bold text-[var(--secondary)]">
                 {roleLabel}
               </span>
             </>
@@ -198,30 +203,42 @@ export function Navbar({ homeHref = "/", displayName, role }: NavbarProps) {
             : "flex shrink-0 items-center gap-[0.8rem] justify-end"}
         >
           {connected && walletAddress ? (
-            <>
-              <span className="text-[0.9rem] font-semibold tracking-[0.02em] text-[#253533]">
-                {shortenAddress(walletAddress)}
-              </span>
-              <button
-                type="button"
-                className="inline-flex min-h-[2.75rem] min-w-[10.5rem] cursor-pointer items-center justify-center rounded-lg border border-[#253533] bg-[#253533] px-5 py-[0.7rem] text-center text-[0.85rem] font-semibold text-[var(--secondary)] transition hover:-translate-y-px hover:brightness-110 disabled:cursor-not-allowed"
-                onClick={async () => {
-                  setIsDisconnecting(true);
-                  try {
-                    await disconnect();
-                  } finally {
-                    setIsDisconnecting(false);
-                  }
+       <>
+  <button
+    type="button"
+    title="Copy wallet address"
+    style={{ color: "#253533" }}  
+    className="group relative cursor-pointer border-none bg-transparent p-0 text-[0.9rem] font-semibold tracking-[0.02em] text-[#253533] transition hover:text-[#253533]/70"
+    onClick={() => {
+      navigator.clipboard.writeText(walletAddress).then(() => {
+        setCopied(true);
+        if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+        copyTimeoutRef.current = window.setTimeout(() => setCopied(false), 1800);
+      });
+    }}
+  >
+    {copied ? "Copied!" : shortenAddress(walletAddress)}
+  </button>
+  <button
+    type="button"
+    className="inline-flex min-h-[2.75rem] min-w-[10.5rem] cursor-pointer items-center justify-center rounded-lg border border-[#253533] bg-[#253533] px-5 py-[0.7rem] text-center text-[0.85rem] font-semibold text-[#253533] transition hover:-translate-y-px hover:brightness-110 disabled:cursor-not-allowed"
+    onClick={async () => {
+      setIsDisconnecting(true);
+      try {
+        await disconnect();
+      } finally {
+        setIsDisconnecting(false);
+      }
 
-                  if (isAppNav) {
-                    router.push("/");
-                  }
-                }}
-                disabled={status === "connecting" || isDisconnecting}
-              >
-                {isDisconnecting ? "Disconnecting..." : "Disconnect"}
-              </button>
-            </>
+      if (isAppNav) {
+        router.push("/");
+      }
+    }}
+    disabled={status === "connecting" || isDisconnecting}
+  >
+    {isDisconnecting ? "Disconnecting..." : "Disconnect"}
+  </button>
+</>
           ) : (
             <button
               type="button"

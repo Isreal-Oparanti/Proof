@@ -7,7 +7,14 @@ import { decryptWithArcium } from "@/lib/arcium";
 
 const DB_NAME = "proof_arcium";
 const COLLECTION = "exam_content";
-const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana.com";
+let _connection: Connection | null = null;
+function getConnection(): Connection {
+  if (!_connection) {
+    const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana.com";
+    _connection = new Connection(rpcUrl, "confirmed");
+  }
+  return _connection;
+}
 
 const PROGRAM_ID = new PublicKey("Ch5KUtPipgBTnjCVX1du7keV7pd6cdxJDLovRErFuSh");
 const SESSION_SEED = "session";
@@ -52,9 +59,8 @@ function parseSessionCompleted(data: Buffer): boolean {
 }
 
 async function isSessionCompleted(examId: string, studentWallet: string) {
-  const conn = new Connection(RPC_URL, "confirmed");
   const pda = await deriveSessionPda(examId, studentWallet);
-  const info = await conn.getAccountInfo(pda);
+  const info = await getConnection().getAccountInfo(pda);
   if (!info?.data) return false;
   return parseSessionCompleted(info.data);
 }

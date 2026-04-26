@@ -40,6 +40,178 @@ function ensureWallet(address: Address | undefined) {
   return address;
 }
 
+type TransactionPlanLike = {
+  error?: unknown;
+  kind?: string;
+  plans?: TransactionPlanLike[];
+  status?: string;
+};
+
+type RpcSimulationData = {
+  err?: unknown;
+  logs?: string[];
+  message?: string;
+  unitsConsumed?: number;
+};
+
+function getObjectProperty(value: unknown, property: string): unknown {
+  if (!value || typeof value !== "object" || !(property in value)) {
+    return undefined;
+  }
+
+  return (value as Record<string, unknown>)[property];
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  const message = getObjectProperty(error, "message");
+  return typeof message === "string" ? message : "Unknown transaction error.";
+}
+
+function getFirstFailedPlanError(plan: unknown): unknown {
+  if (!plan || typeof plan !== "object") {
+    return null;
+  }
+
+  const typedPlan = plan as TransactionPlanLike;
+  if (typedPlan.kind === "single" && typedPlan.status === "failed" && typedPlan.error) {
+    return typedPlan.error;
+  }
+
+  if (Array.isArray(typedPlan.plans)) {
+    for (const nestedPlan of typedPlan.plans) {
+      const nestedError = getFirstFailedPlanError(nestedPlan);
+      if (nestedError) {
+        return nestedError;
+      }
+    }
+  }
+
+  return typedPlan.error ?? null;
+}
+
+function findRpcSimulationData(value: unknown, seen = new WeakSet<object>()): RpcSimulationData | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  if (seen.has(value)) {
+    return null;
+  }
+  seen.add(value);
+
+  const maybeData = value as Record<string, unknown>;
+  if (Array.isArray(maybeData.logs) || maybeData.err !== undefined) {
+    return maybeData as RpcSimulationData;
+  }
+
+  for (const key of ["data", "context", "cause", "error", "transactionPlanResult"]) {
+    const nested = findRpcSimulationData(maybeData[key], seen);
+    if (nested) {
+      return nested;
+    }
+  }
+
+  return null;
+}
+
+function parseInstructionError(err: unknown) {
+  if (!err || typeof err !== "object" || !("InstructionError" in err)) {
+    return null;
+  }
+
+  const instructionError = (err as { InstructionError?: unknown }).InstructionError;
+  if (!Array.isArray(instructionError) || instructionError.length < 2) {
+    return null;
+  }
+
+  const instructionIndex = instructionError[0];
+  const detail = instructionError[1];
+  const customCode =
+    detail && typeof detail === "object" && "Custom" in detail
+      ? Number((detail as { Custom: unknown }).Custom)
+      : null;
+
+  return {
+    customCode: Number.isFinite(customCode) ? customCode : null,
+    instructionIndex: typeof instructionIndex === "number" ? instructionIndex : null,
+  };
+}
+
+function parseAnchorErrorLogs(logs: string[]) {
+  const anchorLine = logs.find((line) => line.includes("AnchorError"));
+  if (!anchorLine) {
+    return null;
+  }
+
+  const match = anchorLine.match(
+    /account: ([^.]+)\. Error Code: ([^.]+)\. Error Number: (\d+)\. Error Message: (.+)$/i,
+  );
+  const leftIndex = logs.findIndex((line) => line === "Program log: Left:");
+  const rightIndex = logs.findIndex((line) => line === "Program log: Right:");
+
+  return {
+    account: match?.[1] ?? null,
+    code: match?.[2] ?? null,
+    left: leftIndex >= 0 ? logs[leftIndex + 1]?.replace("Program log: ", "") : null,
+    message: match?.[4] ?? anchorLine,
+    number: match?.[3] ? Number(match[3]) : null,
+    right: rightIndex >= 0 ? logs[rightIndex + 1]?.replace("Program log: ", "") : null,
+  };
+}
+
+function safeJson(value: unknown) {
+  try {
+    return JSON.stringify(
+      value,
+      (_key, nestedValue) => (typeof nestedValue === "bigint" ? nestedValue.toString() : nestedValue),
+      2,
+    );
+  } catch {
+    return String(value);
+  }
+}
+
+function logReadableTransactionError(error: unknown) {
+  const transactionPlanResult = getObjectProperty(error, "transactionPlanResult");
+  const failedPlanError = getFirstFailedPlanError(transactionPlanResult);
+  const simulationData = findRpcSimulationData(failedPlanError) ?? findRpcSimulationData(error);
+  const logs = simulationData?.logs ?? [];
+  const instructionError = parseInstructionError(simulationData?.err);
+  const anchorError = parseAnchorErrorLogs(logs);
+  const invokedInstructions = logs
+    .filter((line) => line.includes("Program log: Instruction:"))
+    .map((line) => line.replace("Program log: Instruction: ", ""));
+
+  console.groupCollapsed("[Proof Arcium] Transaction failed");
+  console.error("Message:", getErrorMessage(failedPlanError ?? error));
+  console.log("Summary:", {
+    anchorError,
+    invokedInstructions,
+    instructionError,
+    unitsConsumed: simulationData?.unitsConsumed ?? null,
+  });
+
+  if (logs.length > 0) {
+    console.log("Simulation logs:");
+    console.table(logs.map((line, index) => ({ index, line })));
+  }
+
+  if (transactionPlanResult) {
+    console.log("transactionPlanResult:", transactionPlanResult);
+  }
+
+  console.log("Raw error JSON:", safeJson(error));
+  console.groupEnd();
+}
+
 export function useProofArcium() {
   const wallet = useWalletSession();
   const transaction = useSendTransaction();
@@ -61,12 +233,20 @@ export function useProofArcium() {
     }
 
     const feePayer = getAuthority();
-    return transaction.send({
-      authority: wallet,
-      feePayer,
-      instructions: args.instructions,
-      version: 0,
-    });
+    try {
+      return await transaction.send(
+        {
+          authority: wallet,
+          feePayer,
+          instructions: args.instructions,
+          version: 0,
+        },
+        { skipPreflight: false },
+      );
+    } catch (error) {
+      logReadableTransactionError(error);
+      throw error;
+    }
   }
 
   return {
@@ -141,7 +321,10 @@ export function useProofArcium() {
       examId: bigint | number | string;
       takeExamAccounts: TakeExamAccounts;
     }) {
-      return buildTakeExamInstruction(getAuthority(), args, lutQuery.data);
+      // Do not pass LUT data — use all static accounts to avoid
+      // "sanitize accounts offsets correctly" RPC errors caused by
+      // stale/mismatched LUT address indices.
+      return buildTakeExamInstruction(getAuthority(), args, undefined);
     },
 
     getGradeExamCallbackInstruction(args: GradeExamCallbackAccounts & { output: GradeExamCallbackOutput }) {

@@ -7,11 +7,20 @@ import { encryptWithArcium, decryptWithArcium } from "@/lib/arcium";
 
 const DB_NAME = "proof_arcium";
 const COLLECTION = "exam_content";
-const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana.com";
+// Lazily initialised so it picks up the env var at request time, not at module load.
+let _connection: Connection | null = null;
+function getConnection(): Connection {
+  if (!_connection) {
+    const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana.com";
+    _connection = new Connection(rpcUrl, "confirmed");
+  }
+  return _connection;
+}
 
 const PROGRAM_ID = new PublicKey("Ch5KUtPipgBTnjCVX1du7keV7pd6cdxJDLovRErFuSh");
 const EXAM_ACCESS_SEED = "exam-access";
 const EXAM_SEED = "exam";
+const ENROLLMENT_SEED = "enrollment";
 
 async function deriveExamPda(examId: string) {
   const examIdBuf = Buffer.alloc(8);
@@ -24,17 +33,34 @@ async function deriveExamPda(examId: string) {
 }
 
 /**
- * Read the tutor pubkey from the on-chain Exam account.
+ * Read the tutor pubkey and course_id from the on-chain Exam account.
  * Exam layout (Borsh):
  *   discriminator(8) + exam_id(8) + course_id(8) + tutor(32) + ...
  */
-async function getExamTutor(examId: string): Promise<string | null> {
-  const conn = new Connection(RPC_URL, "confirmed");
+async function getExamInfo(examId: string): Promise<{ tutor: string; courseId: bigint } | null> {
   const pda = await deriveExamPda(examId);
-  const info = await conn.getAccountInfo(pda);
+  const info = await getConnection().getAccountInfo(pda);
   if (!info?.data || info.data.length < 8 + 8 + 8 + 32) return null;
+  const courseId = info.data.readBigUInt64LE(8 + 8); // skip discriminator(8) + exam_id(8)
   const tutorBytes = info.data.slice(8 + 8 + 8, 8 + 8 + 8 + 32);
-  return new PublicKey(tutorBytes).toBase58();
+  return { tutor: new PublicKey(tutorBytes).toBase58(), courseId };
+}
+
+async function deriveEnrollmentPda(courseId: bigint, studentWallet: string) {
+  const courseIdBuf = Buffer.alloc(8);
+  courseIdBuf.writeBigUInt64LE(courseId);
+  const [pda] = await PublicKey.findProgramAddress(
+    [Buffer.from(ENROLLMENT_SEED), courseIdBuf, new PublicKey(studentWallet).toBuffer()],
+    PROGRAM_ID,
+  );
+  return pda;
+}
+
+/** Returns true if the student has an Enrollment account for the given course. */
+async function isEnrolled(courseId: bigint, studentWallet: string): Promise<boolean> {
+  const pda = await deriveEnrollmentPda(courseId, studentWallet);
+  const info = await getConnection().getAccountInfo(new PublicKey(pda));
+  return info !== null;
 }
 
 async function deriveExamAccessPda(examId: string, studentWallet: string) {
@@ -48,9 +74,8 @@ async function deriveExamAccessPda(examId: string, studentWallet: string) {
 }
 
 async function hasGrantedAccess(examId: string, studentWallet: string) {
-  const conn = new Connection(RPC_URL, "confirmed");
   const pda = await deriveExamAccessPda(examId, studentWallet);
-  const info = await conn.getAccountInfo(pda);
+  const info = await getConnection().getAccountInfo(pda);
   if (!info?.data || info.data.length < 9) return false;
   // ExamAccess layout (Borsh):
   //   discriminator(8) + exam_id(8) + course_id(8) + student(32) +
@@ -128,8 +153,9 @@ export async function POST(request: Request) {
 }
 
 // GET /api/exam/content?examId=<id>&wallet=<address>
-// - If wallet is the tutor who created the exam → returns questions (no ExamAccess needed)
-// - If wallet is a student with granted ExamAccess on-chain → returns questions
+// - If wallet is the tutor who created the exam → returns questions
+// - If wallet has a granted ExamAccess on-chain → returns questions
+// - If wallet is enrolled in the exam's course → returns questions
 // - Otherwise → 403
 export async function GET(request: Request) {
   try {
@@ -142,14 +168,18 @@ export async function GET(request: Request) {
     }
 
     // Check if the requester is the tutor of this exam
-    const tutorPubkey = await getExamTutor(examId);
-    const isTutor = tutorPubkey === wallet;
+    const examInfo = await getExamInfo(examId);
+    const isTutor = examInfo?.tutor === wallet;
 
     if (!isTutor) {
-      // Fall back to student ExamAccess check
+      // Check for an explicitly granted ExamAccess account first
       const granted = await hasGrantedAccess(examId, wallet);
       if (!granted) {
-        return NextResponse.json({ error: "Exam access not granted on-chain." }, { status: 403 });
+        // Fallback: any student enrolled in the exam's course can access it
+        const enrolled = examInfo ? await isEnrolled(examInfo.courseId, wallet) : false;
+        if (!enrolled) {
+          return NextResponse.json({ error: "Exam access not granted on-chain." }, { status: 403 });
+        }
       }
     }
 

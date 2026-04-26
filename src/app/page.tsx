@@ -10,6 +10,7 @@ import { AddExamDrawer } from "@/components/AddExamDrawer";
 import { useProofArcium } from "@/hooks/useProofArcium";
 import { useProofCourses } from "@/hooks/useProofCourses";
 import { useProofUsers } from "@/hooks/useProofUsers";
+import { useEnrollments } from "@/hooks/useEnrollments";
 import {
   coerceAccountDataBytes,
   decodeGlobalConfigAccount,
@@ -268,6 +269,10 @@ export default function Home() {
   const isRegistered = connectedWalletAddress !== null && isRegisteredOnChain;
   const isTutor = effectiveRole === "tutor";
   const displayCourses = useMemo(() => courseQuery.courses, [courseQuery.courses]);
+  const enrolledCourseIds = useEnrollments(
+    useMemo(() => displayCourses.map((c) => c.courseId), [displayCourses]),
+    !isTutor ? connectedWalletAddress : null,
+  );
   const nextExamId = useMemo(
     () => (decodedGlobalConfig ? (decodedGlobalConfig.examCounter + BigInt(1)).toString() : null),
     [decodedGlobalConfig],
@@ -561,6 +566,7 @@ export default function Home() {
         courseId: courseId.toString(),
       });
       await proofArcium.send({ instructions: [instruction] });
+      await courseQuery.refresh();
       toast.success(`Enrolled in ${title}.`);
     } catch (error) {
       console.error("Enroll course transaction failed", error);
@@ -699,7 +705,7 @@ export default function Home() {
                     const tutorLabel =
                       course.tutorName || `${course.tutor.slice(0, 4)}...${course.tutor.slice(-4)}`;
                     const isOwnerTutor = isTutor && connectedWalletAddress === course.tutor;
-                    const shouldShowEnroll = !isTutor;
+                    const shouldShowEnroll = isRegistered && !isTutor;
                     const actionDisabled = isTutor && !isOwnerTutor;
 
                     return (
@@ -732,12 +738,24 @@ export default function Home() {
                               minHeight: "2.5rem",
                               padding: "0.68rem 1rem",
                               borderRadius: "0.58rem",
+                              WebkitTextFillColor: enrolledCourseIds.has(course.courseId.toString()) ? "#54635d" : "#102320",
+                              background: enrolledCourseIds.has(course.courseId.toString()) ? "#e5dfd6" : "var(--secondary)",
+                              borderColor: enrolledCourseIds.has(course.courseId.toString()) ? "#a2aea1" : "#93ab9c",
+                              cursor: enrolledCourseIds.has(course.courseId.toString()) ? "default" : "pointer",
                             }}
-                            className="inline-flex cursor-pointer items-center justify-center border border-[#93ab9c] bg-[var(--secondary)] text-[0.9rem] font-semibold text-[#102320] transition hover:bg-[#f3e7d8]"
-                            onClick={() => void enrollInCourse(course.courseId, course.title)}
-                            disabled={proofArcium.isSending}
+                            className="inline-flex items-center justify-center border text-[0.9rem] font-semibold transition"
+                            onClick={() => {
+                              if (!enrolledCourseIds.has(course.courseId.toString())) {
+                                void enrollInCourse(course.courseId, course.title);
+                              }
+                            }}
+                            disabled={proofArcium.isSending || enrolledCourseIds.has(course.courseId.toString())}
                           >
-                            {proofArcium.isSending ? "Enrolling..." : "Enroll"}
+                            {enrolledCourseIds.has(course.courseId.toString())
+                              ? "Enrolled"
+                              : proofArcium.isSending
+                              ? "Enrolling..."
+                              : "Enroll"}
                           </button>
                         ) : (
                           <button
@@ -821,7 +839,7 @@ export default function Home() {
                         id="fullName"
                         type="text"
                         value={formData.fullName}
-                        style={{ paddingInline: "20px" }}
+                        style={{ paddingInline: "20px", WebkitTextFillColor: "#1b2c1d" }}
                         onChange={(event) =>
                           setFormData((prev) => ({ ...prev, fullName: event.target.value }))
                         }
@@ -838,7 +856,7 @@ export default function Home() {
                       <select
                         id="role"
                         value={formData.role}
-                        style={{ paddingInline: "20px" }}
+                        style={{ paddingInline: "20px", WebkitTextFillColor: "#1b2c1d" }}
                         onChange={(event) =>
                           setFormData((prev) => ({
                             ...prev,
@@ -920,7 +938,7 @@ export default function Home() {
                     id="courseTitle"
                     type="text"
                     value={courseTitle}
-                    style={{ paddingInline: "20px" }}
+                    style={{ paddingInline: "20px", WebkitTextFillColor: "#1b2c1d" }}
                     onChange={(event) => setCourseTitle(event.target.value)}
                     placeholder="e.g. Solana Basics"
                     className="min-h-[3.1rem] w-full rounded-[0.65rem] border border-[#b6c3a3] bg-[var(--secondary)] py-[0.8rem] text-[1rem] text-[#1b2c1d] outline-none placeholder:text-[#94a08f] focus:border-[#2f4331] focus:ring-2 focus:ring-[rgba(35,53,37,0.2)]"

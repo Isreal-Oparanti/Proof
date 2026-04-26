@@ -3,9 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "NODE_OPTIONS=--use-openssl-ca next dev",
+    "build": "NODE_OPTIONS=--use-openssl-ca next build",
+    "init:grade-exam-comp-def": "node scripts/init-grade-exam-comp-def.js",
+    "upload:grade-exam-circuit": "node scripts/upload-grade-exam-circuit.js",
+    "start": "NODE_OPTIONS=--use-openssl-ca next start",
     "lint": "eslint"
   },
   "dependencies": {

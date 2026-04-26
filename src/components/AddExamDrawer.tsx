@@ -416,9 +416,13 @@ export function AddExamDrawer({
     setIsSaving(true);
 
     try {
-      // Encrypt only the raw answer bytes (one per question, value 0-3).
-      // The on-chain circuit expects exactly question_count ciphertexts.
-      const answerBytes = normalizedQuestions.map((q) => q.correctAnswer);
+      // The Arcium circuit decrypts a fixed 16-slot AnswerKey struct.
+      // Pad unused slots with valid encrypted zeros so `to_arcis()` never
+      // tries to decrypt zero-filled placeholder ciphertexts.
+      const answerBytes = Array.from(
+        { length: 16 },
+        (_, index) => normalizedQuestions[index]?.correctAnswer ?? 0,
+      );
       const answerKeyEncryption = await encryptValues(answerBytes);
 
       // Store questions + correct answers in MongoDB — server Arcium-encrypts them.
@@ -508,11 +512,13 @@ export function AddExamDrawer({
               Input: {
                 activeBorderColor: DRAWER_THEME_COLOR,
                 activeShadow: "0 0 0 2px rgba(37, 53, 51, 0.16)",
+                colorText: "#102320",
                 hoverBorderColor: DRAWER_THEME_COLOR,
               },
               Select: {
                 activeBorderColor: DRAWER_THEME_COLOR,
                 activeOutlineColor: "rgba(37, 53, 51, 0.16)",
+                colorText: "#102320",
                 hoverBorderColor: DRAWER_THEME_COLOR,
               },
             },
