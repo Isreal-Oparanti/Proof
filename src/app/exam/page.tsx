@@ -136,6 +136,7 @@ function ExamPageContent() {
     score: number;
     submittedAnswers: Record<number, number>;
     totalQuestions: number;
+    txHash?: string;
   };
 
   const openDrawer = (item: ExamCatalogItem) => {
@@ -496,7 +497,24 @@ function ExamPageContent() {
       txInstructions.push(takeExamIx);
 
       // 5. Send all instructions in a single transaction
-      await proofArcium.send({ instructions: txInstructions });
+      const txResult = await proofArcium.send({ instructions: txInstructions });
+      // Try to get the transaction signature/hash
+      const txHash = txResult?.signature || txResult?.txid || txResult?.transactionHash || null;
+
+      // Save hash, score, and completed status to backend
+      if (txHash) {
+        await fetch("/api/exam/grade-hash", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            examId: drawerItem.examId.toString(),
+            studentWallet: connectedWalletAddress,
+            txHash,
+            score: setup.score,
+            completed: true,
+          }),
+        });
+      }
 
       // Transaction landed. Show the student their result immediately using
       // the server-side answer check, while the Arcium callback finalizes
@@ -853,23 +871,29 @@ function ExamPageContent() {
                         >
                           {actionLabel}
                         </button>
-                        {!isTutor && hasSubmitted && (
-                          <button
-                            type="button"
+                        {!isTutor && hasSubmitted && completedResult?.txHash && (
+                          <a
+                            href={`https://solscan.io/tx/${completedResult.txHash}?cluster=devnet`}
+                            target="_blank"
+                            rel="noopener noreferrer"
                             style={{
                               minHeight: "2.5rem",
                               padding: "0.68rem 1rem",
                               borderRadius: "0.58rem",
                               cursor: "pointer",
                               WebkitTextFillColor: "var(--secondary)",
-                            }}
-                            className="inline-flex items-center justify-center border border-[#6f9187] bg-[#102320] text-[0.9rem] font-semibold text-[var(--secondary)] transition hover:bg-[#173532]"
-                            onClick={() => {
-                              void openAssessmentProof(item.examId);
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              border: "1px solid #6f9187",
+                              background: "#102320",
+                              fontWeight: 600,
+                              fontSize: "0.9rem",
+                              textDecoration: "none",
                             }}
                           >
                             View Proof On-chain
-                          </button>
+                          </a>
                         )}
                       </div>
                     </article>
