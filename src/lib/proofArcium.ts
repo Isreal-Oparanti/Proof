@@ -36,7 +36,7 @@ const DISCRIMINATORS = {
   createCourse: [120, 121, 154, 164, 107, 180, 167, 241],
   createExam: [247, 135, 105, 245, 128, 52, 23, 97],
   enrollInCourse: [148, 151, 118, 109, 223, 161, 90, 172],
-  gradeExamCallback: [171, 147, 105, 40, 209, 37, 80, 212],
+  gradeExamCallback: [29, 57, 229, 201, 184, 48, 63, 94],
   grantExamAccess: [103, 92, 89, 218, 130, 27, 234, 51],
   initGradeExamCompDef: [51, 24, 232, 80, 93, 173, 182, 104],
   initialize: [175, 175, 109, 31, 13, 152, 155, 237],

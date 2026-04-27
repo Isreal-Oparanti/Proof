@@ -37,6 +37,12 @@ const SOLANA_TRANSACTION_ALREADY_PROCESSED = 7050007;
 
 type ExamCatalogItem = ProofExamRecord;
 
+const SOLSCAN_DEVNET_BASE_URL = "https://solscan.io/account";
+
+function getSolscanAccountUrl(account: string) {
+  return `${SOLSCAN_DEVNET_BASE_URL}/${account}?cluster=devnet`;
+}
+
 function hasSolanaErrorCode(value: unknown, code: number, seen = new WeakSet<object>()): boolean {
   if (!value || typeof value !== "object") {
     return false;
@@ -125,7 +131,12 @@ function ExamPageContent() {
   const [checkingOnChain, setCheckingOnChain] = useState(false);
   const [isLoadingPastResult, setIsLoadingPastResult] = useState(false);
   // Completed exam results fetched from on-chain
-  type CompletedResult = { score: number; totalQuestions: number; correctAnswers: number[]; submittedAnswers: Record<number, number> };
+  type CompletedResult = {
+    correctAnswers: number[];
+    score: number;
+    submittedAnswers: Record<number, number>;
+    totalQuestions: number;
+  };
 
   const openDrawer = (item: ExamCatalogItem) => {
     const key = item.examId.toString();
@@ -210,6 +221,72 @@ function ExamPageContent() {
     setGradingState("done");
   }
 
+  async function showSessionSolscanToast(examId: bigint | number | string) {
+    if (!connectedWalletAddress) return;
+
+    try {
+      const sessionPda = await proofArcium.findSessionPda(examId, connectedWalletAddress);
+      const solscanUrl = getSolscanAccountUrl(sessionPda);
+      toast.success(
+        (t) => (
+          <span>
+            Exam submitted on-chain.{" "}
+            <a
+              href={solscanUrl}
+              rel="noreferrer"
+              target="_blank"
+              style={{ color: "#9fe6b8", fontWeight: 700, textDecoration: "underline" }}
+              onClick={() => toast.dismiss(t.id)}
+            >
+              View session on Solscan
+            </a>
+          </span>
+        ),
+        { duration: 9000 },
+      );
+    } catch (error) {
+      console.warn("[Proof Arcium] Failed to derive session PDA for Solscan toast", error);
+    }
+  }
+
+  async function openAssessmentProof(examId: bigint | number | string) {
+    if (!connectedWalletAddress) {
+      toast.error("Connect a wallet to view your on-chain assessment proof.");
+      return;
+    }
+
+    const proofWindow = window.open("about:blank", "_blank");
+
+    try {
+      const sessionPda = await proofArcium.findSessionPda(examId, connectedWalletAddress);
+      const solscanUrl = getSolscanAccountUrl(sessionPda);
+
+      if (proofWindow) {
+        proofWindow.opener = null;
+        proofWindow.location.href = solscanUrl;
+      } else {
+        toast.success(
+          <span>
+            Proof ready.{" "}
+            <a
+              href={solscanUrl}
+              rel="noreferrer"
+              target="_blank"
+              style={{ color: "#9fe6b8", fontWeight: 700, textDecoration: "underline" }}
+            >
+              Open on Solscan
+            </a>
+          </span>,
+          { duration: 9000 },
+        );
+      }
+    } catch (error) {
+      proofWindow?.close();
+      console.warn("[Proof Arcium] Failed to derive assessment proof PDA", error);
+      toast.error("Unable to open on-chain assessment proof.");
+    }
+  }
+
   // On-chain completion check — runs whenever a non-tutor opens a drawer for
   // an exam not yet in local state. Checks the session PDA on devnet.
   useEffect(() => {
@@ -228,11 +305,11 @@ function ExamPageContent() {
         if (!res.ok) return;
         const data = (await res.json()) as {
           completed: boolean;
-          pending?: boolean;
           correctAnswers?: number[];
-          totalQuestions?: number;
+          pending?: boolean;
           score?: number | null;
           submittedAnswers?: number[];
+          totalQuestions?: number;
         };
         if (cancelled) return;
         const result = getCompletedResultFromStatus(data);
@@ -287,10 +364,10 @@ function ExamPageContent() {
               setCompletedExams((prev) => ({
                 ...prev,
                 [key]: {
-                  score: data.correctAnswers.reduce((acc, ca, idx) => acc + (onChainSubmitted[idx] === ca ? 1 : 0), 0),
-                  totalQuestions: data.correctAnswers.length,
                   correctAnswers: data.correctAnswers,
+                  score: data.correctAnswers.reduce((acc, ca, idx) => acc + (onChainSubmitted[idx] === ca ? 1 : 0), 0),
                   submittedAnswers: onChainSubmitted,
+                  totalQuestions: data.correctAnswers.length,
                 },
               }));
             }
@@ -351,7 +428,7 @@ function ExamPageContent() {
           if (err.alreadySubmitted || err.pending) {
             if (err.correctAnswers?.length) {
               showImmediateResult(drawerItem.examId.toString(), answerArray, err.correctAnswers);
-              toast.success("Exam submission is already on-chain. Showing your result.");
+              void showSessionSolscanToast(drawerItem.examId);
             } else {
               const orderedAnswers = { ...answers };
               setSubmittedAnswers(orderedAnswers);
@@ -425,8 +502,10 @@ function ExamPageContent() {
       // the server-side answer check, while the Arcium callback finalizes
       // the public on-chain session asynchronously.
       showImmediateResult(drawerItem.examId.toString(), answerArray, setup.correctAnswers);
-      toast.success("Exam submitted on-chain. Showing your result.");
-      void examQuery.refresh();
+      void showSessionSolscanToast(drawerItem.examId);
+      closeDrawer();
+      // Optionally, refresh data in the background if needed:
+      // void examQuery.refresh();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to submit exam.";
       if (
@@ -445,7 +524,7 @@ function ExamPageContent() {
 
         if (setup.correctAnswers?.length) {
           showImmediateResult(drawerItem.examId.toString(), answerArray, setup.correctAnswers);
-          toast.success("Exam submission is already on-chain. Showing your result.");
+          void showSessionSolscanToast(drawerItem.examId);
           void examQuery.refresh();
         } else {
           const orderedAnswers = { ...answers };
@@ -751,7 +830,7 @@ function ExamPageContent() {
                           <span style={{ fontSize: "0.78rem", color: "#93ab9c" }}>Score</span>
                         </div>
                       )}
-                      <div style={{ paddingTop: "0.35rem" }}>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.65rem", paddingTop: "0.35rem" }}>
                         <button
                           type="button"
                           disabled={isActionDisabled}
@@ -774,6 +853,24 @@ function ExamPageContent() {
                         >
                           {actionLabel}
                         </button>
+                        {!isTutor && hasSubmitted && (
+                          <button
+                            type="button"
+                            style={{
+                              minHeight: "2.5rem",
+                              padding: "0.68rem 1rem",
+                              borderRadius: "0.58rem",
+                              cursor: "pointer",
+                              WebkitTextFillColor: "var(--secondary)",
+                            }}
+                            className="inline-flex items-center justify-center border border-[#6f9187] bg-[#102320] text-[0.9rem] font-semibold text-[var(--secondary)] transition hover:bg-[#173532]"
+                            onClick={() => {
+                              void openAssessmentProof(item.examId);
+                            }}
+                          >
+                            View Proof On-chain
+                          </button>
+                        )}
                       </div>
                     </article>
                   );

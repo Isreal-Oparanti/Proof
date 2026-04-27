@@ -68,6 +68,16 @@ type ParsedExamImport = {
   title: string;
 };
 
+type PlanFailureLike = {
+  error?: unknown;
+  kind?: string;
+  logs?: string[];
+  message?: string;
+  plans?: PlanFailureLike[];
+  status?: string;
+  transactionPlanResult?: PlanFailureLike;
+};
+
 function encodeUtf8Values(value: string) {
   return Array.from(new TextEncoder().encode(value));
 }
@@ -124,7 +134,90 @@ async function encryptValues(values: number[]) {
 }
 
 function isAlreadyProcessedError(error: unknown) {
-  return error instanceof Error && error.message.toLowerCase().includes("already been processed");
+  const message = getDetailedErrorMessage(error, "").toLowerCase();
+  return message.includes("already been processed");
+}
+
+function getMessageFromUnknownError(error: unknown): string | null {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
+    return error.message;
+  }
+
+  return null;
+}
+
+function getLastLogLine(value: unknown): string | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  if ("logs" in value && Array.isArray(value.logs) && value.logs.length > 0) {
+    const lastLine = value.logs.at(-1);
+    return typeof lastLine === "string" ? lastLine : null;
+  }
+
+  if ("context" in value && value.context && typeof value.context === "object") {
+    return getLastLogLine(value.context);
+  }
+
+  return null;
+}
+
+function getFirstFailedPlanError(plan: unknown): unknown {
+  if (!plan || typeof plan !== "object") {
+    return null;
+  }
+
+  const typedPlan = plan as PlanFailureLike;
+
+  if (typedPlan.kind === "single" && typedPlan.status === "failed" && typedPlan.error) {
+    return typedPlan.error;
+  }
+
+  if (Array.isArray(typedPlan.plans)) {
+    for (const nestedPlan of typedPlan.plans) {
+      const nestedError = getFirstFailedPlanError(nestedPlan);
+      if (nestedError) {
+        return nestedError;
+      }
+    }
+  }
+
+  return null;
+}
+
+function getDetailedErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === "object" && "transactionPlanResult" in error) {
+    const failedPlanError = getFirstFailedPlanError(error.transactionPlanResult);
+    const failedMessage = getMessageFromUnknownError(failedPlanError);
+    const lastLogLine = getLastLogLine(failedPlanError);
+
+    if (failedMessage && lastLogLine && lastLogLine !== failedMessage) {
+      return `${failedMessage} (${lastLogLine})`;
+    }
+
+    if (failedMessage) {
+      return failedMessage;
+    }
+  }
+
+  return getMessageFromUnknownError(error) || fallback;
+}
+
+function isSpuriousTransactionPlanError(error: unknown) {
+  if (!error || typeof error !== "object" || !("transactionPlanResult" in error)) {
+    return false;
+  }
+
+  return getFirstFailedPlanError((error as { transactionPlanResult: unknown }).transactionPlanResult) === null;
 }
 
 function parseAnswerIndex(value: string) {
@@ -449,10 +542,11 @@ export function AddExamDrawer({
           // One ciphertext per answer byte — matches the circuit's AnswerKey struct.
           answerKeyCiphertexts: answerKeyEncryption.ciphertext.map((chunk) => toFixedBytes32(chunk)),
           answerKeyNonce: bytesToLittleEndianBigInt(parseHexBytes(answerKeyEncryption.nonceHex)).toString(),
-          // Content stored off-chain in MongoDB — pass empty array and zeroed pubkey on-chain.
+          // Content is stored off-chain in MongoDB. The on-chain pubkey is used
+          // by the Arcium Shared owner for decrypting the answer-key ciphertexts.
           contentCiphertexts: [],
           contentNonce: 0,
-          contentPubkey: new Uint8Array(32),
+          contentPubkey: parseHexBytes(answerKeyEncryption.clientPublicKeyHex),
         },
         examId: nextExamId,
         questionCount: normalizedQuestions.length,
@@ -463,13 +557,20 @@ export function AddExamDrawer({
       toast.success(`Created ${trimmedTitle}.`);
       onClose();
     } catch (error) {
-      if (isAlreadyProcessedError(error)) {
+      if (isAlreadyProcessedError(error) || isSpuriousTransactionPlanError(error)) {
+        console.warn("Create exam transaction reported a non-fatal transaction plan error", {
+          examId: nextExamId,
+          transactionPlanResult:
+            error && typeof error === "object" && "transactionPlanResult" in error
+              ? error.transactionPlanResult
+              : null,
+        });
         toast.success(`Created ${trimmedTitle}.`);
         onClose();
         return;
       }
 
-      toast.error(error instanceof Error ? error.message : "Failed to create exam.");
+      toast.error(getDetailedErrorMessage(error, "Failed to create exam."));
     } finally {
       setIsSaving(false);
     }

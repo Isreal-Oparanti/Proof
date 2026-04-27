@@ -19,7 +19,7 @@ const SYSTEM_PROGRAM_ID = new PublicKey("11111111111111111111111111111111");
 
 const MXE_ACCOUNT = new PublicKey("D2kBu9GH7UAfhcNfphtYy1VPcSRKAiGpNYaVdr1HmxUE");
 const MXE_AUTHORITY = new PublicKey("HbLHMchM3PvvPFBFD8c2ARVZTVCurrc8cRm1M6cqWiXP");
-const GRADE_EXAM_COMP_DEF_ACCOUNT = new PublicKey("4NoXKQJKXJwrmc5mq7LkHJQZ4KR3trY5y4WeifMQNpyN");
+const GRADE_EXAM_COMP_DEF_ACCOUNT = new PublicKey("CH6pn78ozWgUYKduP8HvbzfZiRGCCFnRSb92AwnvtCfj");
 const MXE_LUT_ACCOUNT = new PublicKey("7gMNVZmDWoWBGHGpdAY1BTYwQgmk73i5o5No93JbMdFr");
 
 const INIT_GRADE_EXAM_COMP_DEF_DISCRIMINATOR = Buffer.from([
@@ -56,7 +56,7 @@ async function main() {
   const connection = new Connection(rpcUrl, "confirmed");
   const { keypair, keypairPath } = readKeypair();
 
-  console.log("Proof Arcium grade_exam comp-def init");
+  console.log("Proof Arcium grade_exam_v4 comp-def init");
   console.log("RPC:", rpcUrl);
   console.log("Keypair:", keypairPath);
   console.log("Signer:", keypair.publicKey.toBase58());
@@ -98,7 +98,7 @@ async function main() {
   const signature = await sendAndConfirmTransaction(connection, transaction, [keypair], {
     commitment: "confirmed",
   });
-  console.log("Initialized grade_exam comp-def.");
+  console.log("Initialized grade_exam_v4 comp-def.");
   console.log("Signature:", signature);
 }
 

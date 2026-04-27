@@ -18,7 +18,7 @@ import { decryptWithArcium } from "@/lib/arcium";
 
 const PROOF_ARCIUM_PID = new PublicKey("Ch5KUtPipgBTnjCVX1du7keV7pd6cdxJDLovRErFuSh");
 const CLUSTER_OFFSET = Number(process.env.ARCIUM_CLUSTER_OFFSET ?? "456");
-const GRADE_EXAM_COMP_DEF_OFFSET = 2545603068;
+const GRADE_EXAM_COMP_DEF_OFFSET = 937725067;
 const DB_NAME = "proof_arcium";
 const COLLECTION = "exam_content";
 
@@ -114,7 +114,7 @@ export async function POST(request: Request) {
     const executingPoolAddress = getExecutingPoolAccAddress(CLUSTER_OFFSET);
     const clusterAddress = getClusterAccAddress(CLUSTER_OFFSET);
 
-    // Must match COMP_DEF_OFFSET_GRADE_EXAM = comp_def_offset("grade_exam")
+    // Must match COMP_DEF_OFFSET_GRADE_EXAM = comp_def_offset("grade_exam_v4")
     // in the deployed Anchor program.
     let compDefOffset: number;
     const envCompDefOffset = process.env.ARCIUM_COMP_DEF_OFFSET;
