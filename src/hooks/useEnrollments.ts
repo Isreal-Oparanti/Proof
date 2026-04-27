@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { findEnrollmentPda } from "@/lib/proofArcium";
 
@@ -8,14 +8,18 @@ const RPC_URL =
   process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana.com";
 
 /**
- * Returns a Set of course IDs (as strings) that the given student is enrolled in.
- * Refreshes whenever the courseIds list or studentWallet changes.
+ * Returns a tuple of [enrolledSet, refresh].
+ * enrolledSet contains course IDs (as strings) that the given student is enrolled in.
+ * refresh() re-checks on-chain enrollment state.
  */
 export function useEnrollments(
   courseIds: bigint[],
   studentWallet: string | null,
-): Set<string> {
+): [Set<string>, () => void] {
   const [enrolled, setEnrolled] = useState<Set<string>>(new Set());
+  const [trigger, setTrigger] = useState(0);
+
+  const refresh = useCallback(() => setTrigger((t) => t + 1), []);
 
   useEffect(() => {
     if (!studentWallet || courseIds.length === 0) {
@@ -53,7 +57,8 @@ export function useEnrollments(
     // eslint-disable-next-line react-hooks/exhaustive-deps
     courseIds.map((id) => id.toString()).join(","),
     studentWallet,
+    trigger,
   ]);
 
-  return enrolled;
+  return [enrolled, refresh];
 }

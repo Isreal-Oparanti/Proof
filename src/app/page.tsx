@@ -148,6 +148,13 @@ function isAlreadyProcessedError(error: unknown) {
   return detailedMessage.includes("already been processed") || rawMessage.includes("already been processed");
 }
 
+function isSpuriousTransactionPlanError(error: unknown) {
+  if (!error || typeof error !== "object" || !("transactionPlanResult" in error)) {
+    return false;
+  }
+  return getFirstFailedPlanError((error as { transactionPlanResult: unknown }).transactionPlanResult) === null;
+}
+
 function hasFetchedOnChainAccount(account: ReturnType<typeof useAccount>) {
   return Boolean(
     account &&
@@ -269,7 +276,7 @@ export default function Home() {
   const isRegistered = connectedWalletAddress !== null && isRegisteredOnChain;
   const isTutor = effectiveRole === "tutor";
   const displayCourses = useMemo(() => courseQuery.courses, [courseQuery.courses]);
-  const enrolledCourseIds = useEnrollments(
+  const [enrolledCourseIds, refreshEnrollments] = useEnrollments(
     useMemo(() => displayCourses.map((c) => c.courseId), [displayCourses]),
     !isTutor ? connectedWalletAddress : null,
   );
@@ -452,6 +459,11 @@ export default function Home() {
       }));
       toast.success(`Registered ${trimmedName} as ${formData.role}.`);
     } catch (error) {
+      if (isAlreadyProcessedError(error) || isSpuriousTransactionPlanError(error)) {
+        setFormData((prev) => ({ ...prev, fullName: trimmedName }));
+        toast.success(`Registered ${trimmedName} as ${formData.role}.`);
+        return;
+      }
       console.error("Registration transaction failed", error);
       toast.error(getDetailedErrorMessage(error, "Failed to register user."));
     }
@@ -525,7 +537,7 @@ export default function Home() {
       setIsCreateOpen(false);
       toast.success(`Created ${trimmedTitle}.`);
     } catch (error) {
-      if (isAlreadyProcessedError(error)) {
+      if (isAlreadyProcessedError(error) || isSpuriousTransactionPlanError(error)) {
         await courseQuery.refresh();
         setCourseTitle("");
         setIsCreateOpen(false);
@@ -567,8 +579,15 @@ export default function Home() {
       });
       await proofArcium.send({ instructions: [instruction] });
       await courseQuery.refresh();
+      refreshEnrollments();
       toast.success(`Enrolled in ${title}.`);
     } catch (error) {
+      if (isAlreadyProcessedError(error) || isSpuriousTransactionPlanError(error)) {
+        await courseQuery.refresh();
+        refreshEnrollments();
+        toast.success(`Enrolled in ${title}.`);
+        return;
+      }
       console.error("Enroll course transaction failed", error);
       toast.error(getDetailedErrorMessage(error, "Failed to enroll in course."));
     }
@@ -693,7 +712,7 @@ export default function Home() {
                 className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
               >
                 {courseQuery.isLoading ? (
-                  <article className="rounded-[0.95rem] border border-[#4a6460] bg-[linear-gradient(160deg,#2a3b39,#253533)] p-5 text-[0.95rem] text-[var(--secondary)]/80 md:col-span-2 xl:col-span-3">
+                  <article className="rounded-[0.95rem] bg-[linear-gradient(160deg,#2a3b39,#253533)] p-5 text-[0.95rem] text-[var(--secondary)]/80 md:col-span-2 xl:col-span-3">
                     Loading courses...
                   </article>
                 ) : displayCourses.length === 0 ? (
@@ -839,7 +858,7 @@ export default function Home() {
                         id="fullName"
                         type="text"
                         value={formData.fullName}
-                        style={{ paddingInline: "20px", WebkitTextFillColor: "#1b2c1d" }}
+                        style={{ paddingInline: "20px", color: "#253533", WebkitTextFillColor: "#253533" }}
                         onChange={(event) =>
                           setFormData((prev) => ({ ...prev, fullName: event.target.value }))
                         }
@@ -856,7 +875,7 @@ export default function Home() {
                       <select
                         id="role"
                         value={formData.role}
-                        style={{ paddingInline: "20px", WebkitTextFillColor: "#1b2c1d" }}
+                        style={{ paddingInline: "20px", color: "#253533", WebkitTextFillColor: "#253533" }}
                         onChange={(event) =>
                           setFormData((prev) => ({
                             ...prev,
@@ -913,9 +932,7 @@ export default function Home() {
             >
               Create Course
             </h2>
-            <p className="text-[0.95rem] text-[#3e4f3d]">
-              Add a new course shell for your registered profile.
-            </p>
+       
             <form
               onSubmit={createCourse}
               style={{ marginTop: "12px" }}

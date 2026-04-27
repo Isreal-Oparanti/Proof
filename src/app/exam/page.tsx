@@ -107,7 +107,7 @@ function ExamPageContent() {
     () => examQuery.exams.map((exam) => exam.courseId),
     [examQuery.exams],
   );
-  const enrolledCourseIds = useEnrollments(
+  const [enrolledCourseIds] = useEnrollments(
     examCourseIds,
     !isTutor ? connectedWalletAddress : null,
   );
@@ -426,6 +426,7 @@ function ExamPageContent() {
       // the public on-chain session asynchronously.
       showImmediateResult(drawerItem.examId.toString(), answerArray, setup.correctAnswers);
       toast.success("Exam submitted on-chain. Showing your result.");
+      void examQuery.refresh();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to submit exam.";
       if (
@@ -445,11 +446,13 @@ function ExamPageContent() {
         if (setup.correctAnswers?.length) {
           showImmediateResult(drawerItem.examId.toString(), answerArray, setup.correctAnswers);
           toast.success("Exam submission is already on-chain. Showing your result.");
+          void examQuery.refresh();
         } else {
           const orderedAnswers = { ...answers };
           setSubmittedAnswers(orderedAnswers);
           setGradingState("pending");
           toast.success("Exam submission is already on-chain. Waiting for Arcium to grade...");
+          void examQuery.refresh();
         }
       } else if (msg.toLowerCase().includes("already initialized")) {
         // Program rejected retake — session PDA already exists on-chain
