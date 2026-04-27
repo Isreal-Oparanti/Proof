@@ -22,12 +22,13 @@ export async function POST(request: Request) {
       { $set: { txHash, score, completed } },
       { upsert: true, returnDocument: "after" }
     );
+    const doc = result && result.value ? result.value : { txHash, score, completed };
     return NextResponse.json({
       examId,
       studentWallet,
-      txHash: result.value?.txHash || txHash,
-      score: result.value?.score || score,
-      completed: result.value?.completed ?? completed,
+      txHash: doc.txHash,
+      score: doc.score,
+      completed: doc.completed,
     });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to save grade hash." }, { status: 500 });

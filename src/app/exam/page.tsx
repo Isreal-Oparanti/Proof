@@ -499,7 +499,7 @@ function ExamPageContent() {
       // 5. Send all instructions in a single transaction
       const txResult = await proofArcium.send({ instructions: txInstructions });
       // Try to get the transaction signature/hash
-      const txHash = txResult?.signature || txResult?.txid || txResult?.transactionHash || null;
+      const txHash = txResult || null;
 
       // Save hash, score, and completed status to backend
       if (txHash) {
