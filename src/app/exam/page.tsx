@@ -861,14 +861,14 @@ function ExamPageContent() {
                           type="button"
                           disabled={isActionDisabled}
                           style={{
-                            minHeight: "2.5rem",
-                            padding: "0.68rem 1rem",
-                            borderRadius: "0.58rem",
+                            minHeight: "2.25rem",
+                            padding: "0.52rem 0.85rem",
+                            borderRadius: "0.5rem",
                             cursor: isActionDisabled ? "not-allowed" : "pointer",
                             opacity: isActionDisabled ? 0.55 : 1,
                             WebkitTextFillColor: "#102320",
                           }}
-                          className="inline-flex items-center justify-center border border-[#93ab9c] bg-[var(--secondary)] text-[0.9rem] font-semibold text-[#102320] transition enabled:cursor-pointer enabled:hover:bg-[#f3e7d8]"
+                          className="inline-flex items-center justify-center border border-[#93ab9c] bg-[var(--secondary)] text-[0.84rem] font-semibold text-[#102320] transition enabled:cursor-pointer enabled:hover:bg-[#f3e7d8]"
                           onClick={() => {
                             if (isActionDisabled) {
                               return;

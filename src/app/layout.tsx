@@ -6,7 +6,7 @@ import { AppLayoutShell } from "../components/AppLayoutShell";
 import { AppProviders } from "../components/providers/AppProviders";
 
 export const metadata: Metadata = {
-  title: "Proof | Decentralized LMS on Solana",
+  title: "Proof Arcium",
   description:
     "Proof is a Solana-based learning platform where tutors publish courses and encrypted exams, and students take assessments with verifiable results recorded on-chain.",
 };
