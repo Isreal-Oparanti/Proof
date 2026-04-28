@@ -1,36 +1,71 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Proof Frontier Frontend
 
-## Getting Started
+Proof Frontier is a learning and assessment frontend built on Solana and Arcium. It lets tutors create courses and exams, lets students enroll and take exams, and uses encrypted computation so grading can happen without exposing private exam answers in plain text.
 
-First, run the development server:
+The frontend connects to the Proof Arcium program:
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+https://github.com/bellobambo/proof_arcium
+
+Program id:
+
+```text
+Ch5KUtPipgBTnjCVX1du7keV7pd6cdxJDLovRErFuSh
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## What The Project Does
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+Proof Frontier supports a basic course and exam flow:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- tutors register and create courses
+- tutors create encrypted exams for their courses
+- students register and enroll in courses
+- students request access to exam content
+- tutors grant access by encrypting the content key for the student
+- students submit answers
+- Arcium handles private grading computation
+- the frontend shows the student exam result once grading is complete
 
-## Learn More
+The goal is to keep the learning workflow familiar while moving the sensitive parts of assessment, especially answer keys and grading, into encrypted infrastructure.
 
-To learn more about Next.js, take a look at the following resources:
+## How The Frontend Uses The IDL
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+The Solana program is written in Anchor, so the program repo produces an IDL that describes the program instructions, accounts, data types, and account layout.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+In this frontend, that IDL is reflected in `src/lib/proofArcium.ts`. This file acts as the typed program client for the app. It defines the program id, account shapes, instruction discriminators, PDA helpers, and instruction builders used by the UI.
 
-## Deploy on Vercel
+The frontend uses that generated program knowledge to build transactions for actions like:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- registering a user
+- creating a course
+- creating an exam
+- enrolling in a course
+- requesting and granting exam access
+- taking an exam
+- handling the Arcium grading callback
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+So the frontend does not treat the program as a black box. It uses the IDL-derived client code to know how each instruction should be encoded, which accounts are required, and how program-derived addresses should be calculated.
+
+When the on-chain program changes, the frontend client must stay in sync with the latest IDL from the program repo. Otherwise, instruction data, account order, or PDA derivation can drift from what the deployed program expects.
+
+## How The Frontend Uses Arcium
+
+Arcium is used for the privacy-preserving part of the exam flow.
+
+When a tutor creates an exam, sensitive exam material and answer data are encrypted before being stored or sent through the app. When a student takes an exam, their submitted answers are prepared for Arcium's encrypted computation flow instead of being graded openly by the frontend.
+
+The frontend coordinates this flow by:
+
+- encrypting exam content and answer material
+- managing student access to encrypted content
+- preparing the accounts needed for an Arcium computation
+- sending the transaction that starts private grading
+- checking for the grading result
+- displaying the final score once the computation completes
+
+The on-chain Proof Arcium program owns the Solana-side workflow, while Arcium provides the encrypted computation layer used to grade the exam privately.
+
+## Relationship Between The Frontend And Program
+
+The frontend is the user-facing app. The `proof_arcium` program is the source of truth for course, exam, enrollment, access, and grading state.
+
+The frontend uses the program IDL to speak the program's language, and it uses Arcium to keep private exam data protected while still allowing grading to happen.
