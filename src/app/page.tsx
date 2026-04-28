@@ -65,6 +65,12 @@ const loadingPanelStyle: CSSProperties = {
   color: "rgba(245,232,213,0.8)",
 };
 
+function refreshPageAfterSuccessTransaction() {
+  window.setTimeout(() => {
+    window.location.reload();
+  }, 700);
+}
+
 function getLastLogLine(value: unknown): string | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -490,11 +496,13 @@ export default function Home() {
       }));
       setIsRegisterOpen(false);
       toast.success(`Registered ${trimmedName} as ${formData.role}.`);
+      refreshPageAfterSuccessTransaction();
     } catch (error) {
       if (isAlreadyProcessedError(error) || isSpuriousTransactionPlanError(error)) {
         setFormData((prev) => ({ ...prev, fullName: trimmedName }));
         setIsRegisterOpen(false);
         toast.success(`Registered ${trimmedName} as ${formData.role}.`);
+        refreshPageAfterSuccessTransaction();
         return;
       }
       console.error("Registration transaction failed", error);
@@ -569,12 +577,14 @@ export default function Home() {
       setCourseTitle("");
       setIsCreateOpen(false);
       toast.success(`Created ${trimmedTitle}.`);
+      refreshPageAfterSuccessTransaction();
     } catch (error) {
       if (isAlreadyProcessedError(error) || isSpuriousTransactionPlanError(error)) {
         await courseQuery.refresh();
         setCourseTitle("");
         setIsCreateOpen(false);
         toast.success(`Created ${trimmedTitle}.`);
+        refreshPageAfterSuccessTransaction();
         return;
       }
 
@@ -634,6 +644,7 @@ export default function Home() {
       await courseQuery.refresh();
       refreshEnrollments();
       toast.success(`Enrolled in ${title}.`);
+      refreshPageAfterSuccessTransaction();
     } catch (error) {
       logEnrollFailureDetails(error, courseId, title);
 
@@ -641,6 +652,7 @@ export default function Home() {
         await courseQuery.refresh();
         refreshEnrollments();
         toast.success(`Enrolled in ${title}.`);
+        refreshPageAfterSuccessTransaction();
         return;
       }
 
@@ -648,6 +660,7 @@ export default function Home() {
         await courseQuery.refresh();
         refreshEnrollments();
         toast.success(`Enrolled in ${title}.`);
+        refreshPageAfterSuccessTransaction();
         return;
       }
 
@@ -734,7 +747,7 @@ export default function Home() {
                   marginBottom: "1.75rem",
                 }}
               >
-                {isRegistered ? (
+                {isRegistered && isTutor ? (
                   <button
                     type="button"
                     style={{
@@ -748,7 +761,7 @@ export default function Home() {
                   >
                     Create Course
                   </button>
-                ) : (
+                ) : !isRegistered ? (
                   <button
                     type="button"
                     style={{
@@ -762,7 +775,7 @@ export default function Home() {
                   >
                     Register Account
                   </button>
-                )}
+                ) : null}
                 <Link
                   href="/exam"
                   style={{
@@ -1022,7 +1035,7 @@ export default function Home() {
         </div>
       ) : null}
 
-      {isRegistered && isCreateOpen ? (
+      {isRegistered && isTutor && isCreateOpen ? (
         <div
           className="fixed inset-0 z-20 grid place-items-center bg-[rgba(4,11,10,0.62)]"
           onClick={() => setIsCreateOpen(false)}
