@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ConfigProvider, Drawer } from "antd";
+import type { CSSProperties } from "react";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useAccount, useWalletConnection } from "@solana/react-hooks";
 import { address, getAddressEncoder } from "@solana/addresses";
@@ -34,6 +35,18 @@ type ArciumTakeExamSetup = {
 
 const DRAWER_THEME_COLOR = "#253533";
 const SOLANA_TRANSACTION_ALREADY_PROCESSED = 7050007;
+const loadingPanelStyle: CSSProperties = {
+  borderRadius: "0.95rem",
+  background: "linear-gradient(160deg,#2a3b39,#253533)",
+  padding: "1.25rem",
+  fontSize: "0.95rem",
+  color: "rgba(245,232,213,0.8)",
+};
+const compactLoadingPanelStyle: CSSProperties = {
+  ...loadingPanelStyle,
+  padding: "0.85rem 1rem",
+  fontSize: "0.9rem",
+};
 
 type ExamCatalogItem = ProofExamRecord;
 
@@ -740,22 +753,9 @@ function ExamPageContent() {
               className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
             >
               {examQuery.isLoading ? (
-                <section
-                  style={{
-                    display: "flex",  // Add flex display
-                    justifyContent: "center",  // Horizontally center the article
-                    alignItems: "center",  // Vertically center the article
-                    width: "100%",
-                    height: "100vh",  // Ensure it takes the full viewport height
-                    marginInline: "auto",
-                    justifySelf: "center",
-                  }}
-                  className="grid gap-0"
-                >
-                  <article className="rounded-[0.95rem] bg-[linear-gradient(160deg,#2a3b39,#253533)] p-5 text-[0.95rem] text-[var(--secondary)]/80 md:col-span-2 xl:col-span-3">
-                    Loading on-chain assessments...
-                  </article>
-                </section>
+                <article style={loadingPanelStyle} className="md:col-span-2 xl:col-span-3">
+                  Loading on-chain assessments...
+                </article>
               ) : visibleExams.length === 0 ? (
                 <article className="rounded-[0.95rem] border border-[#4a6460] bg-[linear-gradient(160deg,#2a3b39,#253533)] p-5 text-[0.95rem] text-[var(--secondary)]/80 md:col-span-2 xl:col-span-3">
                   {isTutor
@@ -806,19 +806,27 @@ function ExamPageContent() {
                         Exam #{item.examId.toString()} · Course #{item.courseId.toString()}
                       </p>
                       {!isTutor && isScoreLoading && !hasSubmitted && (
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.1rem" }}>
+                        <div
+                          style={{
+                            ...compactLoadingPanelStyle,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.5rem",
+                            marginTop: "0.1rem",
+                          }}
+                        >
                           <span
                             style={{
                               width: "0.8rem",
                               height: "0.8rem",
-                              border: "2px solid #3d5450",
-                              borderTopColor: "#7fbf9c",
+                              border: "2px solid rgba(245,232,213,0.35)",
+                              borderTopColor: "rgba(245,232,213,0.9)",
                               borderRadius: "50%",
                               display: "inline-block",
                               animation: "spin 0.8s linear infinite",
                             }}
                           />
-                          <span style={{ fontSize: "0.78rem", color: "#93ab9c" }}>
+                          <span style={{ fontSize: "0.85rem", color: "rgba(245,232,213,0.8)" }}>
                             Loading score...
                           </span>
                         </div>
@@ -871,11 +879,9 @@ function ExamPageContent() {
                         >
                           {actionLabel}
                         </button>
-                        {!isTutor && hasSubmitted && completedResult?.txHash && (
-                          <a
-                            href={`https://solscan.io/tx/${completedResult.txHash}?cluster=devnet`}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                        {!isTutor && hasSubmitted && (
+                          <button
+                            type="button"
                             style={{
                               minHeight: "2.5rem",
                               padding: "0.68rem 1rem",
@@ -889,11 +895,13 @@ function ExamPageContent() {
                               background: "#102320",
                               fontWeight: 600,
                               fontSize: "0.9rem",
-                              textDecoration: "none",
+                            }}
+                            onClick={() => {
+                              void openAssessmentProof(item.examId);
                             }}
                           >
-                            View Proof On-chain
-                          </a>
+                            View On-chain Proof
+                          </button>
                         )}
                       </div>
                     </article>
@@ -1030,21 +1038,29 @@ function ExamPageContent() {
           }
         >
           {isLoadingPastResult && (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.85rem", padding: "2rem 0", color: "#93ab9c" }}>
+            <div
+              style={{
+                ...loadingPanelStyle,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "0.85rem",
+              }}
+            >
               <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-              <div style={{ width: "2.25rem", height: "2.25rem", border: "3px solid #3d5450", borderTopColor: "#7fbf9c", borderRadius: "50%", animation: "spin 0.9s linear infinite" }} />
-              <p style={{ margin: 0, fontSize: "0.98rem", fontWeight: 500, color: "#eef6ed" }}>Loading past submission...</p>
+              <div style={{ width: "2.25rem", height: "2.25rem", border: "3px solid rgba(245,232,213,0.35)", borderTopColor: "rgba(245,232,213,0.9)", borderRadius: "50%", animation: "spin 0.9s linear infinite" }} />
+              <p style={{ margin: 0, fontSize: "0.98rem", fontWeight: 500, color: "rgba(245,232,213,0.9)" }}>Loading past submission...</p>
             </div>
           )}
 
           {!isLoadingPastResult && checkingOnChain && gradingState === "idle" && (
-            <p style={{ margin: 0, color: "#93ab9c", fontSize: "0.92rem" }}>
+            <p style={{ ...compactLoadingPanelStyle, margin: 0 }}>
               Checking on-chain status…
             </p>
           )}
 
           {!isLoadingPastResult && examContent.status === "loading" && gradingState === "idle" && !checkingOnChain && (
-            <p style={{ margin: 0, color: "#93ab9c", fontSize: "0.95rem" }}>
+            <p style={{ ...compactLoadingPanelStyle, margin: 0 }}>
               Loading questions...
             </p>
           )}
@@ -1072,11 +1088,19 @@ function ExamPageContent() {
 
           {/* Grading spinner */}
           {!isLoadingPastResult && gradingState === "pending" && (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem", padding: "2rem 0", color: "#93ab9c" }}>
+            <div
+              style={{
+                ...loadingPanelStyle,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "1rem",
+              }}
+            >
               <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-              <div style={{ width: "2.5rem", height: "2.5rem", border: "3px solid #3d5450", borderTopColor: "#7fbf9c", borderRadius: "50%", animation: "spin 0.9s linear infinite" }} />
-              <p style={{ margin: 0, fontSize: "1rem", fontWeight: 500, color: "#eef6ed" }}>Arcium is grading your answers…</p>
-              <p style={{ margin: 0, fontSize: "0.87rem" }}>This may take up to 2 minutes. Keep this window open.</p>
+              <div style={{ width: "2.5rem", height: "2.5rem", border: "3px solid rgba(245,232,213,0.35)", borderTopColor: "rgba(245,232,213,0.9)", borderRadius: "50%", animation: "spin 0.9s linear infinite" }} />
+              <p style={{ margin: 0, fontSize: "1rem", fontWeight: 500, color: "rgba(245,232,213,0.9)" }}>Arcium is grading your answers…</p>
+              <p style={{ margin: 0, fontSize: "0.87rem", color: "rgba(245,232,213,0.72)" }}>This may take up to 2 minutes. Keep this window open.</p>
             </div>
           )}
 

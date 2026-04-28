@@ -3,11 +3,20 @@
 import {
   useWalletConnection,
 } from "@solana/react-hooks";
+import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
 
 type WalletConnectionButtonProps = {
   className?: string;
   connectedLabel?: string;
+};
+
+const loadingPanelStyle: CSSProperties = {
+  borderRadius: "0.95rem",
+  background: "linear-gradient(160deg,#2a3b39,#253533)",
+  padding: "1.25rem",
+  fontSize: "0.95rem",
+  color: "rgba(245,232,213,0.8)",
 };
 
 function shortenAddress(address: string) {
@@ -75,7 +84,7 @@ export function WalletConnectionButton({
       {isOpen ? (
         <div className="absolute right-0 top-[calc(100%+0.5rem)] z-30 grid min-w-[17rem] gap-2 rounded-2xl border border-[#9ab09f] bg-[var(--secondary)] p-3 shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
           {!isReady ? (
-            <p className="m-0 break-all text-[0.85rem] leading-5 text-[#253533]">
+            <p style={{ ...loadingPanelStyle, margin: 0, wordBreak: "break-word" }}>
               Loading wallet connectors...
             </p>
           ) : connected && wallet ? (
