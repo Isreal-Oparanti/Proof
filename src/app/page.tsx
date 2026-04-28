@@ -2,9 +2,10 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import type { FormEvent } from "react";
+import type { CSSProperties, FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useAccount, useWalletConnection } from "@solana/react-hooks";
+import { Connection, PublicKey } from "@solana/web3.js";
 import toast from "react-hot-toast";
 import { AddExamDrawer } from "@/components/AddExamDrawer";
 import { useProofArcium } from "@/hooks/useProofArcium";
@@ -56,6 +57,13 @@ const DEVNET_ENDPOINT =
   process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com";
 const MAX_USER_NAME_LENGTH = 64;
 const MAX_COURSE_TITLE_LENGTH = 100;
+const loadingPanelStyle: CSSProperties = {
+  borderRadius: "0.95rem",
+  background: "linear-gradient(160deg,#2a3b39,#253533)",
+  padding: "1.25rem",
+  fontSize: "0.95rem",
+  color: "rgba(245,232,213,0.8)",
+};
 
 function getLastLogLine(value: unknown): string | null {
   if (!value || typeof value !== "object") {
@@ -153,6 +161,28 @@ function isSpuriousTransactionPlanError(error: unknown) {
     return false;
   }
   return getFirstFailedPlanError((error as { transactionPlanResult: unknown }).transactionPlanResult) === null;
+}
+
+function isTransactionPlanFailedWrapper(error: unknown) {
+  const message = (getMessageFromUnknownError(error) || "").toLowerCase();
+  return message.includes("provided transaction plan failed to execute");
+}
+
+function getTransactionPlanResult(error: unknown) {
+  return error && typeof error === "object" && "transactionPlanResult" in error
+    ? (error as { transactionPlanResult: unknown }).transactionPlanResult
+    : null;
+}
+
+function logEnrollFailureDetails(error: unknown, courseId: bigint, title: string) {
+  console.log("Enroll course real error message", getDetailedErrorMessage(error, "Failed to enroll in course."));
+  console.log("Enroll course failure details", {
+    courseId: courseId.toString(),
+    customProgramErrorCode: getCustomProgramErrorCode(error),
+    rawMessage: getMessageFromUnknownError(error),
+    title,
+    transactionPlanResult: getTransactionPlanResult(error),
+  });
 }
 
 function hasFetchedOnChainAccount(account: ReturnType<typeof useAccount>) {
@@ -573,6 +603,26 @@ export default function Home() {
 
     proofArcium.reset();
 
+    const confirmEnrollmentOnChain = async () => {
+      const enrollmentPda = await proofArcium.findEnrollmentPda(
+        courseId,
+        connectedWalletAddress,
+      );
+      const connection = new Connection(DEVNET_ENDPOINT, "confirmed");
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const accountInfo = await connection.getAccountInfo(new PublicKey(enrollmentPda));
+        if (accountInfo !== null) {
+          return true;
+        }
+        await new Promise((resolve) => {
+          setTimeout(resolve, 900);
+        });
+      }
+
+      return false;
+    };
+
     try {
       const instruction = await proofArcium.getEnrollInCourseInstruction({
         courseId: courseId.toString(),
@@ -582,12 +632,22 @@ export default function Home() {
       refreshEnrollments();
       toast.success(`Enrolled in ${title}.`);
     } catch (error) {
+      logEnrollFailureDetails(error, courseId, title);
+
       if (isAlreadyProcessedError(error) || isSpuriousTransactionPlanError(error)) {
         await courseQuery.refresh();
         refreshEnrollments();
         toast.success(`Enrolled in ${title}.`);
         return;
       }
+
+      if (isTransactionPlanFailedWrapper(error) && await confirmEnrollmentOnChain()) {
+        await courseQuery.refresh();
+        refreshEnrollments();
+        toast.success(`Enrolled in ${title}.`);
+        return;
+      }
+
       console.error("Enroll course transaction failed", error);
       toast.error(getDetailedErrorMessage(error, "Failed to enroll in course."));
     }
@@ -712,7 +772,7 @@ export default function Home() {
                 className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
               >
                 {courseQuery.isLoading ? (
-                  <article className="rounded-[0.95rem] bg-[linear-gradient(160deg,#2a3b39,#253533)] p-5 text-[0.95rem] text-[var(--secondary)]/80 md:col-span-2 xl:col-span-3">
+                  <article style={loadingPanelStyle} className="md:col-span-2 xl:col-span-3">
                     Loading courses...
                   </article>
                 ) : displayCourses.length === 0 ? (
