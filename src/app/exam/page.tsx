@@ -48,6 +48,12 @@ const compactLoadingPanelStyle: CSSProperties = {
   fontSize: "0.9rem",
 };
 
+function refreshPageAfterSuccessTransaction() {
+  window.setTimeout(() => {
+    window.location.reload();
+  }, 700);
+}
+
 type ExamCatalogItem = ProofExamRecord;
 
 const SOLSCAN_DEVNET_BASE_URL = "https://solscan.io/account";
@@ -535,6 +541,7 @@ function ExamPageContent() {
       showImmediateResult(drawerItem.examId.toString(), answerArray, setup.correctAnswers);
       void showSessionSolscanToast(drawerItem.examId);
       closeDrawer();
+      refreshPageAfterSuccessTransaction();
       // Optionally, refresh data in the background if needed:
       // void examQuery.refresh();
     } catch (e) {
@@ -557,12 +564,14 @@ function ExamPageContent() {
           showImmediateResult(drawerItem.examId.toString(), answerArray, setup.correctAnswers);
           void showSessionSolscanToast(drawerItem.examId);
           void examQuery.refresh();
+          refreshPageAfterSuccessTransaction();
         } else {
           const orderedAnswers = { ...answers };
           setSubmittedAnswers(orderedAnswers);
           setGradingState("pending");
           toast.success("Exam submission is already on-chain. Waiting for Arcium to grade...");
           void examQuery.refresh();
+          refreshPageAfterSuccessTransaction();
         }
       } else if (msg.toLowerCase().includes("already initialized")) {
         // Program rejected retake — session PDA already exists on-chain

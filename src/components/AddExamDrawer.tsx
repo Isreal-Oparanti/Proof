@@ -27,6 +27,12 @@ Option 4: 11
 Answer: 3
 `;
 
+function refreshPageAfterSuccessTransaction() {
+  window.setTimeout(() => {
+    window.location.reload();
+  }, 700);
+}
+
 type ExamDrawerCourse = {
   courseId: bigint;
   title: string;
@@ -600,6 +606,7 @@ export function AddExamDrawer({
       await proofArcium.send({ instructions: [instruction] });
       toast.success(`Created ${trimmedTitle}.`);
       onClose();
+      refreshPageAfterSuccessTransaction();
     } catch (error) {
       if (isAlreadyProcessedError(error) || isSpuriousTransactionPlanError(error)) {
         console.warn("Create exam transaction reported a non-fatal transaction plan error", {
@@ -611,6 +618,7 @@ export function AddExamDrawer({
         });
         toast.success(`Created ${trimmedTitle}.`);
         onClose();
+        refreshPageAfterSuccessTransaction();
         return;
       }
 
