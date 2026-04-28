@@ -171,6 +171,45 @@ function getLastLogLine(value: unknown): string | null {
   return null;
 }
 
+function findLogLine(value: unknown, predicate: (line: string) => boolean, seen = new WeakSet<object>()): string | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  if (seen.has(value)) {
+    return null;
+  }
+  seen.add(value);
+
+  const record = value as Record<string, unknown>;
+  if (Array.isArray(record.logs)) {
+    const match = record.logs.find((line) => typeof line === "string" && predicate(line));
+    if (typeof match === "string") {
+      return match;
+    }
+  }
+
+  for (const key of ["cause", "context", "data", "error", "transactionPlanResult"]) {
+    const match = findLogLine(record[key], predicate, seen);
+    if (match) {
+      return match;
+    }
+  }
+
+  return null;
+}
+
+function getInsufficientLamportsMessage(error: unknown) {
+  const logLine = findLogLine(error, (line) => line.toLowerCase().includes("insufficient lamports"));
+  const match = logLine?.match(/insufficient lamports\s+(\d+),\s*need\s+(\d+)/i);
+
+  if (!match) {
+    return null;
+  }
+
+  return "Not enough balance to initate transaction";
+}
+
 function getFirstFailedPlanError(plan: unknown): unknown {
   if (!plan || typeof plan !== "object") {
     return null;
@@ -195,6 +234,11 @@ function getFirstFailedPlanError(plan: unknown): unknown {
 }
 
 function getDetailedErrorMessage(error: unknown, fallback: string) {
+  const insufficientLamportsMessage = getInsufficientLamportsMessage(error);
+  if (insufficientLamportsMessage) {
+    return insufficientLamportsMessage;
+  }
+
   if (error && typeof error === "object" && "transactionPlanResult" in error) {
     const failedPlanError = getFirstFailedPlanError(error.transactionPlanResult);
     const failedMessage = getMessageFromUnknownError(failedPlanError);

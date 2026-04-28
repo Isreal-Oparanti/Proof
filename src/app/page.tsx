@@ -223,6 +223,7 @@ export default function Home() {
   const [globalConfigAddress, setGlobalConfigAddress] = useState<string | null>(null);
   const [isAddExamOpen, setIsAddExamOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [courseTitle, setCourseTitle] = useState("");
   const [selectedCourseForExam, setSelectedCourseForExam] = useState<null | {
     courseId: bigint;
@@ -487,10 +488,12 @@ export default function Home() {
         ...prev,
         fullName: trimmedName,
       }));
+      setIsRegisterOpen(false);
       toast.success(`Registered ${trimmedName} as ${formData.role}.`);
     } catch (error) {
       if (isAlreadyProcessedError(error) || isSpuriousTransactionPlanError(error)) {
         setFormData((prev) => ({ ...prev, fullName: trimmedName }));
+        setIsRegisterOpen(false);
         toast.success(`Registered ${trimmedName} as ${formData.role}.`);
         return;
       }
@@ -706,13 +709,9 @@ export default function Home() {
     <div className="min-h-screen pt-8 pb-12 font-[family:var(--font-geist-sans)]">
       <div className="mx-auto w-full px-4 sm:px-6 lg:px-8">
         <main
-          className={
-            status === "connected" && !isRegistered
-              ? "mx-auto flex min-h-[calc(100vh-8rem)] w-full items-center justify-center"
-              : "mx-auto grid min-h-[calc(100vh-8rem)] w-full gap-8"
-          }
+          className="mx-auto grid min-h-[calc(100vh-8rem)] w-full gap-8"
         >
-          {isRegistered ? (
+          {isConnected ? (
             <section
               style={{
                 width: "100%",
@@ -735,19 +734,35 @@ export default function Home() {
                   marginBottom: "1.75rem",
                 }}
               >
-                <button
-                  type="button"
-                  style={{
-                    height: "2.55rem",
-                    color: "var(--background)",
-                    WebkitTextFillColor: "var(--background)",
-                    opacity: 1,
-                  }}
-                  className="inline-flex min-w-[10.25rem] cursor-pointer items-center justify-center rounded-lg border border-[#253533] bg-[var(--secondary)] px-[1.1rem] text-center text-[0.95rem] font-semibold transition hover:-translate-y-px hover:bg-[#f3e7d8]"
-                  onClick={() => setIsCreateOpen(true)}
-                >
-                  Create Course
-                </button>
+                {isRegistered ? (
+                  <button
+                    type="button"
+                    style={{
+                      height: "2.55rem",
+                      color: "var(--background)",
+                      WebkitTextFillColor: "var(--background)",
+                      opacity: 1,
+                    }}
+                    className="inline-flex min-w-[10.25rem] cursor-pointer items-center justify-center rounded-lg border border-[#253533] bg-[var(--secondary)] px-[1.1rem] text-center text-[0.95rem] font-semibold transition hover:-translate-y-px hover:bg-[#f3e7d8]"
+                    onClick={() => setIsCreateOpen(true)}
+                  >
+                    Create Course
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    style={{
+                      height: "2.55rem",
+                      color: "var(--background)",
+                      WebkitTextFillColor: "var(--background)",
+                      opacity: 1,
+                    }}
+                    className="inline-flex min-w-[10.25rem] cursor-pointer items-center justify-center rounded-lg border border-[#253533] bg-[var(--secondary)] px-[1.1rem] text-center text-[0.95rem] font-semibold transition hover:-translate-y-px hover:bg-[#f3e7d8]"
+                    onClick={() => setIsRegisterOpen(true)}
+                  >
+                    Register Account
+                  </button>
+                )}
                 <Link
                   href="/exam"
                   style={{
@@ -759,7 +774,7 @@ export default function Home() {
                   }}
                   className="inline-flex min-w-[10.25rem] cursor-pointer items-center justify-center rounded-lg border border-[#253533] bg-[var(--secondary)] px-[1.1rem] text-center text-[0.95rem] font-semibold transition hover:-translate-y-px hover:bg-[#f3e7d8]"
                 >
-                  {isTutor ? "My Exams" : "Exams"}
+                  {isRegistered && isTutor ? "My Exams" : "Exams"}
                 </Link>
               </div>
               <section
@@ -783,9 +798,9 @@ export default function Home() {
                   displayCourses.map((course) => {
                     const tutorLabel =
                       course.tutorName || `${course.tutor.slice(0, 4)}...${course.tutor.slice(-4)}`;
-                    const isOwnerTutor = isTutor && connectedWalletAddress === course.tutor;
+                    const isOwnerTutor = isRegistered && isTutor && connectedWalletAddress === course.tutor;
                     const shouldShowEnroll = isRegistered && !isTutor;
-                    const actionDisabled = isTutor && !isOwnerTutor;
+                    const actionDisabled = !isRegistered || (isTutor && !isOwnerTutor);
 
                     return (
                     <article
@@ -847,6 +862,7 @@ export default function Home() {
                               borderColor: actionDisabled ? "#a2aea1" : "#93ab9c",
                               color: actionDisabled ? "#54635d" : "#102320",
                               opacity: actionDisabled ? 0.92 : 1,
+                              filter: !isRegistered ? "blur(0.55px)" : "none",
                               pointerEvents: actionDisabled ? "none" : "auto",
                               cursor: actionDisabled ? "not-allowed" : "pointer",
                             }}
@@ -864,9 +880,15 @@ export default function Home() {
                               });
                             }}
                             aria-disabled={actionDisabled}
-                            title={actionDisabled ? "Only the course owner can add an exam." : "Add an exam for this course"}
+                            title={
+                              !isRegistered
+                                ? "Register to use this action."
+                                : actionDisabled
+                                ? "Only the course owner can add an exam."
+                                : "Add an exam for this course"
+                            }
                           >
-                            Add Exam
+                            {isRegistered ? "Add Exam" : "Register to continue"}
                           </button>
                         )}
                       </div>
@@ -878,90 +900,6 @@ export default function Home() {
             </section>
           ) : null}
 
-          {status === "connected" && !isRegistered ? (
-            <section className="flex w-full items-center justify-center py-6">
-              <div
-                style={{ padding: "18px 20px" }}
-                className="w-full max-w-[460px] rounded-[0.95rem] border border-[#bdc79f] bg-[var(--secondary)] shadow-[0_18px_40px_rgba(5,14,13,0.4)]"
-              >
-                <h2
-                  style={{ marginBottom: "4px" }}
-                  className="text-[1.6rem] leading-none tracking-[0.02em] text-[#233525]"
-                >
-                  Register Your Account
-                </h2>
-                <p className="text-[0.95rem] text-[#3e4f3d]">
-                  Create your on-chain user profile before continuing.
-                </p>
-                <form
-                  onSubmit={handleSubmit}
-                  style={{ marginTop: "12px" }}
-                  className="rounded-[0.85rem] bg-[rgba(255,255,255,0.2)]"
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "14px",
-                      padding: "14px 18px",
-                    }}
-                    className="sm:px-10 sm:py-7"
-                  >
-                    <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-                      <label
-                        htmlFor="fullName"
-                        className="text-[0.98rem] font-semibold text-[#243527]"
-                      >
-                        Full name
-                      </label>
-                      <input
-                        id="fullName"
-                        type="text"
-                        value={formData.fullName}
-                        style={{ paddingInline: "20px", color: "#253533", WebkitTextFillColor: "#253533" }}
-                        onChange={(event) =>
-                          setFormData((prev) => ({ ...prev, fullName: event.target.value }))
-                        }
-                        placeholder="Enter your full name"
-                        className="min-h-[3.1rem] w-full rounded-[0.65rem] border border-[#b6c3a3] bg-[var(--secondary)] py-[0.8rem] text-[1rem] text-[#1b2c1d] outline-none placeholder:text-[#94a08f] focus:border-[#2f4331] focus:ring-2 focus:ring-[rgba(35,53,37,0.2)]"
-                        required
-                      />
-                    </div>
-
-                    <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-                      <label htmlFor="role" className="text-[0.98rem] font-semibold text-[#243527]">
-                        Role
-                      </label>
-                      <select
-                        id="role"
-                        value={formData.role}
-                        style={{ paddingInline: "20px", color: "#253533", WebkitTextFillColor: "#253533" }}
-                        onChange={(event) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            role: event.target.value as UserRole,
-                          }))
-                        }
-                        className="min-h-[3.1rem] w-full rounded-[0.65rem] border border-[#b6c3a3] bg-[var(--secondary)] py-[0.8rem] text-[1rem] text-[#1b2c1d] outline-none focus:border-[#2f4331] focus:ring-2 focus:ring-[rgba(35,53,37,0.2)]"
-                      >
-                        <option value="student">Student</option>
-                        <option value="tutor">Tutor</option>
-                      </select>
-                    </div>
-
-                    <button
-                      type="submit"
-                      style={{ marginTop: "0" }}
-                      className="inline-flex min-h-[3rem] min-w-[12rem] cursor-pointer items-center justify-center rounded-[0.72rem] border border-[#89a391] bg-[#0f1f1d] px-6 py-[0.8rem] text-[1rem] font-semibold tracking-[0.02em] text-[var(--secondary)] transition hover:-translate-y-px hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
-                      disabled={proofArcium.isSending}
-                    >
-                      {proofArcium.isSending ? "Registering..." : "Register"}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </section>
-          ) : null}
         </main>
       </div>
 
@@ -975,6 +913,114 @@ export default function Home() {
         open={isAddExamOpen}
         tutorDisplayName={effectiveName}
       />
+
+      {isConnected && !isRegistered && isRegisterOpen ? (
+        <div
+          className="fixed inset-0 z-20 grid place-items-center bg-[rgba(4,11,10,0.62)]"
+          onClick={() => setIsRegisterOpen(false)}
+        >
+          <div
+            style={{ padding: "18px 20px", position: "relative" }}
+            className="w-full max-w-[460px] rounded-[0.95rem] border border-[#bdc79f] bg-[var(--secondary)] shadow-[0_18px_40px_rgba(5,14,13,0.4)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              aria-label="Close registration modal"
+              style={{
+                position: "absolute",
+                top: "0.7rem",
+                right: "0.75rem",
+                width: "2.35rem",
+                height: "2.35rem",
+                color: "#253533",
+                WebkitTextFillColor: "#253533",
+              }}
+              className="inline-flex cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent text-[1.65rem] leading-none transition hover:border-[#b6c3a3] hover:bg-[#f3e7d8]"
+              onClick={() => setIsRegisterOpen(false)}
+            >
+              ×
+            </button>
+            <h2
+              style={{ marginBottom: "4px" }}
+              className="text-[1.6rem] leading-none tracking-[0.02em] text-[#233525]"
+            >
+              Register Your Account
+            </h2>
+            <p className="text-[0.95rem] text-[#3e4f3d]">
+              Create your on-chain user profile before continuing.
+            </p>
+            <form
+              onSubmit={handleSubmit}
+              style={{ marginTop: "12px" }}
+              className="rounded-[0.85rem] bg-[rgba(255,255,255,0.2)]"
+            >
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "14px",
+                  padding: "14px 18px",
+                }}
+                className="sm:px-10 sm:py-7"
+              >
+                <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                  <label
+                    htmlFor="fullName"
+                    className="text-[0.98rem] font-semibold text-[#243527]"
+                  >
+                    Full name
+                  </label>
+                  <input
+                    id="fullName"
+                    type="text"
+                    value={formData.fullName}
+                    style={{ paddingInline: "20px", color: "#253533", WebkitTextFillColor: "#253533" }}
+                    onChange={(event) =>
+                      setFormData((prev) => ({ ...prev, fullName: event.target.value }))
+                    }
+                    placeholder="Enter your full name"
+                    className="min-h-[3.1rem] w-full rounded-[0.65rem] border border-[#b6c3a3] bg-[var(--secondary)] py-[0.8rem] text-[1rem] text-[#1b2c1d] outline-none placeholder:text-[#94a08f] focus:border-[#2f4331] focus:ring-2 focus:ring-[rgba(35,53,37,0.2)]"
+                    required
+                  />
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                  <label htmlFor="role" className="text-[0.98rem] font-semibold text-[#243527]">
+                    Role
+                  </label>
+                  <select
+                    id="role"
+                    value={formData.role}
+                    style={{ paddingInline: "20px", color: "#253533", WebkitTextFillColor: "#253533" }}
+                    onChange={(event) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        role: event.target.value as UserRole,
+                      }))
+                    }
+                    className="min-h-[3.1rem] w-full rounded-[0.65rem] border border-[#b6c3a3] bg-[var(--secondary)] py-[0.8rem] text-[1rem] text-[#1b2c1d] outline-none focus:border-[#2f4331] focus:ring-2 focus:ring-[rgba(35,53,37,0.2)]"
+                  >
+                    <option value="student">Student</option>
+                    <option value="tutor">Tutor</option>
+                  </select>
+                </div>
+
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+                  <button
+                    type="submit"
+                    style={{ marginTop: "0" }}
+                    className="inline-flex min-h-[3rem] min-w-[12rem] cursor-pointer items-center justify-center rounded-[0.72rem] border border-[#89a391] bg-[#0f1f1d] px-6 py-[0.8rem] text-[1rem] font-semibold tracking-[0.02em] text-[var(--secondary)] transition hover:-translate-y-px hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
+                    disabled={proofArcium.isSending}
+                  >
+                    {proofArcium.isSending ? "Registering..." : "Register"}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
 
       {isRegistered && isCreateOpen ? (
         <div
