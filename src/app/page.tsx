@@ -346,7 +346,7 @@ export default function Home() {
           const message =
             error instanceof Error ? error.message : "Failed to load Arcium status.";
           setArciumError(message);
-          toast.error(message);
+          // toast.error(message);
         }
       }
     }
