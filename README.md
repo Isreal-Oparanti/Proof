@@ -69,3 +69,32 @@ The on-chain Proof Arcium program owns the Solana-side workflow, while Arcium pr
 The frontend is the user-facing app. The `proof_arcium` program is the source of truth for course, exam, enrollment, access, and grading state.
 
 The frontend uses the program IDL to speak the program's language, and it uses Arcium to keep private exam data protected while still allowing grading to happen.
+
+
+
+## Run Locally
+
+1. Clone the repo:
+```bash
+   git clone https://github.com/Isreal-Oparanti/Proof
+```
+2. Navigate into the project directory:
+```bash
+   cd Proof
+```
+3. Install dependencies:
+```bash
+   npm install
+```
+4. Create a `.env.local` file and add:
+```
+   MONGODB_URI=
+   NEXT_PUBLIC_SOLANA_RPC_URL=
+   ARCIUM_MXE_PUBLIC_KEY_HEX=a024a5ed985698b91948d7551e12ab802a80fc030aa378f6a0681e8dafdd3c07
+   ARCIUM_CLUSTER_OFFSET=456
+   ARCIUM_COMP_DEF_OFFSET=937725067
+```
+5. Start the dev server:
+```bash
+   npm run dev
+```
